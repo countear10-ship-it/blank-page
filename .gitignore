@@ -3,3 +3,5 @@ dist/
 coverage/
 github-pages-qr.png
 .DS_Store
+worker/.dev.vars
+.env.local
