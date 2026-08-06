@@ -8,7 +8,8 @@ const SOURCES = {
 
 const DEFAULT_DATA_API_BASE_URL = 'https://seasafe-busan-api.seasafe-busan-api.workers.dev';
 const API_BASE_URL = ((import.meta.env.VITE_DATA_API_BASE_URL as string | undefined) || DEFAULT_DATA_API_BASE_URL).replace(/\/$/, '');
-const REQUEST_TIMEOUT_MS = 8_000;
+// 공공 해양관측망 응답이 느린 경우가 있어, 공식 응답을 기다리되 무한 대기는 피합니다.
+const REQUEST_TIMEOUT_MS = 45_000;
 
 function unavailable<T>(source: { name: string; url: string }, message: string): ApiResponse<T> {
   return { status: 'unavailable', data: null, source, fetchedAt: new Date().toISOString(), stale: false, message };
