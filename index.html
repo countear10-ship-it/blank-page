@@ -1,1 +1,168 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>미니 팩맨</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100svh;
+      background: radial-gradient(circle at top, #182b59, #050914 62%);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      padding: max(12px, env(safe-area-inset-top)) 12px max(18px, env(safe-area-inset-bottom));
+      overscroll-behavior: none;
+    }
+    .game-shell { width: min(100%, 560px); text-align: center; }
+    h1 { margin: 0 0 8px; color: #ffe600; font-size: clamp(1.7rem, 7vw, 2.5rem); letter-spacing: .08em; }
+    .subtitle { margin: 0 0 12px; color: #b9c5e8; font-size: .92rem; }
+    .hud { display: flex; justify-content: space-between; gap: 8px; margin: 0 auto 10px; width: min(92vw, 480px); font-weight: 700; }
+    .hud span { color: #ffe600; }
+    .board-wrap { position: relative; width: min(92vw, 480px); margin: auto; }
+    canvas {
+      display: block; width: 100%; height: auto; border: 3px solid #3156bd; border-radius: 12px;
+      background: #000; box-shadow: 0 0 22px #163e9e; touch-action: none; image-rendering: pixelated;
+    }
+    .message {
+      position: absolute; inset: 0; display: grid; place-items: center; padding: 24px;
+      background: rgb(0 0 0 / 68%); border-radius: 10px; font-size: clamp(1.1rem, 5vw, 1.6rem); font-weight: 800;
+    }
+    .message[hidden] { display: none; }
+    .controls { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 64px); gap: 8px; width: min(82vw, 260px); margin: 16px auto 10px; }
+    .control, .restart {
+      border: 1px solid #4f72d6; border-radius: 16px; color: #fff; background: #172b62;
+      font-size: 1.75rem; font-weight: 800; box-shadow: inset 0 -4px rgb(0 0 0 / 22%); touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .control:active, .restart:active { transform: translateY(2px); background: #294999; }
+    .up { grid-column: 2; grid-row: 1; } .left { grid-column: 1; grid-row: 2; }
+    .down { grid-column: 2; grid-row: 2; } .right { grid-column: 3; grid-row: 2; }
+    .restart { padding: 11px 18px; font-size: 1rem; background: #273a79; }
+    .hint { margin: 12px 0 0; color: #aab6d7; font-size: .8rem; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <main class="game-shell">
+    <h1>MINI PAC-MAN</h1>
+    <p class="subtitle">점을 모두 먹고 유령을 피해보세요!</p>
+    <div class="hud" aria-live="polite"><div>점수 <span id="score">0</span></div><div>목숨 <span id="lives">3</span></div></div>
+    <div class="board-wrap">
+      <canvas id="game" width="480" height="512" aria-label="팩맨 게임판"></canvas>
+      <div id="message" class="message" hidden></div>
+    </div>
+    <div class="controls" aria-label="게임 방향키">
+      <button class="control up" data-dir="up" aria-label="위">▲</button>
+      <button class="control left" data-dir="left" aria-label="왼쪽">◀</button>
+      <button class="control down" data-dir="down" aria-label="아래">▼</button>
+      <button class="control right" data-dir="right" aria-label="오른쪽">▶</button>
+    </div>
+    <button id="restart" class="restart">다시 시작</button>
+    <p class="hint">휴대폰: 방향키 또는 게임판 스와이프<br>컴퓨터: 방향키 · R 키</p>
+  </main>
 
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const message = document.getElementById('message');
+    const CELL = 32;
+    const MAP = [
+      '###############', '#.............#', '#.###.#####.#.#', '#.#.........#.#',
+      '#.#.###.###.#.#', '#.............#', '#.###.#.#.###.#', '#.....#.#.....#',
+      '#####.#.#.#####', '#.....#.#.....#', '#.###.#.#.###.#', '#.............#',
+      '#.#.###.###.#.#', '#.#.........#.#', '#.###.#####.#.#', '###############'
+    ];
+    const ROWS = MAP.length, COLS = MAP[0].length;
+    const DIRS = { left: { x: -1, y: 0 }, right: { x: 1, y: 0 }, up: { x: 0, y: -1 }, down: { x: 0, y: 1 } };
+    const COLORS = ['#ff5b66', '#ff9de2', '#55d9ff'];
+    let pellets, pacman, ghosts, wanted, score, lives, running, lastPoint;
+
+    function reset() {
+      pellets = new Set();
+      MAP.forEach((row, y) => [...row].forEach((cell, x) => { if (cell === '.') pellets.add(`${x},${y}`); }));
+      pacman = { x: 1, y: 1, dir: null };
+      ghosts = [
+        { x: 7, y: 7, dir: 'left', color: COLORS[0] },
+        { x: 9, y: 7, dir: 'right', color: COLORS[1] },
+        { x: 7, y: 9, dir: 'up', color: COLORS[2] }
+      ];
+      wanted = null; score = 0; lives = 3; running = true;
+      message.hidden = true; updateHud(); draw();
+    }
+
+    function updateHud() { scoreEl.textContent = score; livesEl.textContent = lives; }
+    function open(x, y) { return x >= 0 && x < COLS && y >= 0 && y < ROWS && MAP[y][x] !== '#'; }
+    function canMove(entity, dir) { const d = DIRS[dir]; return !!d && open(entity.x + d.x, entity.y + d.y); }
+    function setDirection(dir) { if (running) wanted = dir; }
+
+    function tick() {
+      if (!running) return;
+      if (wanted && canMove(pacman, wanted)) pacman.dir = wanted;
+      if (pacman.dir && canMove(pacman, pacman.dir)) {
+        pacman.x += DIRS[pacman.dir].x; pacman.y += DIRS[pacman.dir].y;
+      }
+      const pellet = `${pacman.x},${pacman.y}`;
+      if (pellets.delete(pellet)) score += 10;
+      ghosts.forEach(moveGhost);
+      if (ghosts.some(g => g.x === pacman.x && g.y === pacman.y)) {
+        lives -= 1; updateHud();
+        if (lives <= 0) return endGame('게임 오버<br><small>다시 시작을 눌러 재도전!</small>');
+        pacman = { x: 1, y: 1, dir: null }; ghosts[0].x = 7; ghosts[0].y = 7;
+      }
+      if (!pellets.size) return endGame('성공!<br><small>모든 점을 먹었습니다!</small>');
+      updateHud(); draw();
+    }
+
+    function moveGhost(ghost) {
+      const options = Object.keys(DIRS).filter(dir => canMove(ghost, dir));
+      if (!options.length) return;
+      if (!canMove(ghost, ghost.dir) || Math.random() < .28) {
+        const reverse = ghost.dir === 'left' ? 'right' : ghost.dir === 'right' ? 'left' : ghost.dir === 'up' ? 'down' : 'up';
+        const choices = options.filter(dir => dir !== reverse);
+        ghost.dir = choices[Math.floor(Math.random() * (choices.length || options.length))] || options[0];
+      }
+      if (canMove(ghost, ghost.dir)) { ghost.x += DIRS[ghost.dir].x; ghost.y += DIRS[ghost.dir].y; }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      MAP.forEach((row, y) => [...row].forEach((cell, x) => {
+        if (cell === '#') {
+          ctx.fillStyle = '#10276d'; ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+          ctx.strokeStyle = '#2e62ed'; ctx.lineWidth = 2; ctx.strokeRect(x * CELL + 4, y * CELL + 4, CELL - 8, CELL - 8);
+        }
+      }));
+      ctx.fillStyle = '#ffe7a3'; pellets.forEach(key => { const [x, y] = key.split(',').map(Number); ctx.beginPath(); ctx.arc(x * CELL + 16, y * CELL + 16, 3, 0, Math.PI * 2); ctx.fill(); });
+      drawPacman(); ghosts.forEach(drawGhost);
+    }
+
+    function drawPacman() {
+      const angles = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 };
+      const angle = angles[pacman.dir] ?? 0, openMouth = .24 + Math.abs(Math.sin(Date.now() / 90)) * .24;
+      ctx.fillStyle = '#ffe600'; ctx.beginPath(); ctx.moveTo(pacman.x * CELL + 16, pacman.y * CELL + 16);
+      ctx.arc(pacman.x * CELL + 16, pacman.y * CELL + 16, 12, angle + openMouth, angle - openMouth + Math.PI * 2); ctx.closePath(); ctx.fill();
+    }
+
+    function drawGhost(g) {
+      const px = g.x * CELL + 16, py = g.y * CELL + 16;
+      ctx.fillStyle = g.color; ctx.beginPath(); ctx.arc(px, py - 1, 12, Math.PI, 0); ctx.lineTo(px + 12, py + 12); ctx.lineTo(px + 6, py + 8); ctx.lineTo(px, py + 12); ctx.lineTo(px - 6, py + 8); ctx.lineTo(px - 12, py + 12); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(px - 5, py - 2, 4, 0, Math.PI * 2); ctx.arc(px + 5, py - 2, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#182b59'; ctx.beginPath(); ctx.arc(px - 4, py - 2, 2, 0, Math.PI * 2); ctx.arc(px + 6, py - 2, 2, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function endGame(text) { running = false; message.innerHTML = text; message.hidden = false; draw(); }
+    document.querySelectorAll('[data-dir]').forEach(button => button.addEventListener('pointerdown', event => { event.preventDefault(); setDirection(button.dataset.dir); }));
+    document.addEventListener('keydown', event => { const key = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' }[event.key]; if (key) { event.preventDefault(); setDirection(key); } if (event.key.toLowerCase() === 'r') reset(); });
+    let startTouch = null;
+    canvas.addEventListener('pointerdown', event => { startTouch = { x: event.clientX, y: event.clientY }; canvas.setPointerCapture?.(event.pointerId); });
+    canvas.addEventListener('pointerup', event => { if (!startTouch) return; const dx = event.clientX - startTouch.x, dy = event.clientY - startTouch.y; if (Math.max(Math.abs(dx), Math.abs(dy)) > 18) setDirection(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up')); startTouch = null; });
+    document.getElementById('restart').addEventListener('click', reset);
+    reset(); setInterval(tick, 180);
+  </script>
+</body>
+</html>
