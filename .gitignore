@@ -1,0 +1,5 @@
+node_modules/
+dist/
+coverage/
+github-pages-qr.png
+.DS_Store

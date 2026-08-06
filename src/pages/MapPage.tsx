@@ -1,0 +1,19 @@
+import { useMemo, useState } from 'react';
+import { CircleAlert, ExternalLink, MapPinned } from 'lucide-react';
+import { CircleMarker, MapContainer, Popup, TileLayer } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import regions from '../data/regions.json';
+import { Card, DemoBadge, RiskBadge, RiskHistoryChart, SourceLine } from '../components/UI';
+import type { Region, RiskLevel } from '../types';
+
+const typedRegions = regions as Region[];
+const mapCenter: [number, number] = [35.14, 129.08];
+const markerColors: Record<RiskLevel, string> = { safe: '#16845b', caution: '#d89a19', danger: '#c84643', unknown: '#8491a3' };
+
+export default function MapPage() {
+  const [selectedId, setSelectedId] = useState('gijang');
+  const selected = useMemo(() => typedRegions.find((region) => region.id === selectedId) ?? typedRegions[0], [selectedId]);
+  return <div className="container page-stack"><div className="page-intro"><div><p className="eyebrow">BUSAN COAST WATCH</p><h1>부산 해산물 위험지도</h1><p>지역 마커를 눌러 현재 확인된 특별한 주의정보, 패류독소, 검사자료와 필요한 행동을 확인하세요.</p></div><DemoBadge /></div><div className="map-notice"><CircleAlert size={18} /><span><strong>시연용 데이터</strong> · 실시간 API가 아닌 교체 가능한 샘플입니다. ‘안전’은 절대 보장이 아니라 현재 확인된 정보의 상태입니다.</span></div><section className="map-layout"><Card className="map-card"><MapContainer center={mapCenter} zoom={11} scrollWheelZoom={false} className="leaflet-map"><TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />{typedRegions.map((region) => <CircleMarker key={region.id} center={[region.latitude, region.longitude]} radius={11} pathOptions={{ color: '#fff', weight: 3, fillColor: markerColors[region.riskLevel], fillOpacity: .92 }} eventHandlers={{ click: () => setSelectedId(region.id) }}><Popup><strong>{region.name}</strong><br />{region.summary}</Popup></CircleMarker>)}</MapContainer><div className="map-legend"><span><i className="legend-dot safe" /> 현재 확인된 특별한 주의정보 없음</span><span><i className="legend-dot caution" /> 주의 필요</span><span><i className="legend-dot danger" /> 채취·섭취 주의</span><span><i className="legend-dot unknown" /> 최신 데이터 없음</span></div></Card><aside className="region-list"><div className="list-heading"><strong>지원 지역</strong><span>{typedRegions.length}곳</span></div>{typedRegions.map((region) => <button key={region.id} className={`region-list-item ${region.id === selected.id ? 'selected' : ''}`} onClick={() => setSelectedId(region.id)}><span className={`region-pin pin-${region.riskLevel}`} /><span className="region-list-copy"><strong>{region.name}</strong><small>{region.updatedAt} 업데이트</small></span><RiskBadge level={region.riskLevel} compact /></button>)}</aside></section><Card className="selected-region"><div className="card-topline"><div className="selected-title"><MapPinned size={19} /><h2>{selected.name}</h2></div><RiskBadge level={selected.riskLevel} /><DemoBadge /></div><p className="lead-copy">{selected.summary}</p><div className="detail-grid"><Detail label="관련 해산물" value={selected.affectedSeafood.join(' · ')} /><Detail label="패류독소 주의" value={selected.toxinStatus} /><Detail label="수온·해양환경" value={selected.waterTemperature} /><Detail label="방사능·안전검사" value={selected.radiationStatus} /></div><div className="action-panel"><strong>필요한 행동</strong><span>{selected.recommendation}</span></div><RiskHistoryChart points={selected.riskHistory} /><SourceLine name={selected.sourceName} url={selected.sourceUrl} date={`관측 ${selected.observedAt} · 업데이트 ${selected.updatedAt}`} /><a className="external-link" href={selected.sourceUrl} target="_blank" rel="noreferrer">공식 원문 열기 <ExternalLink size={14} /></a></Card></div>;
+}
+
+function Detail({ label, value }: { label: string; value: string }) { return <div className="detail-item"><span>{label}</span><strong>{value}</strong></div>; }
