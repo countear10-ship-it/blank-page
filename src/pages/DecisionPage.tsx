@@ -152,9 +152,9 @@ export default function DecisionPage() {
             <br />
             <em>먹어도 될까?</em>
           </h1>
-          <p>
-            해산물·지역·생식 여부·보관 상태·개인 조건을 조합해 공식 데이터
-            기준의 행동을 안내합니다. 입력 내용은 브라우저에서만 처리합니다.
+          <p className="decision-intro-copy">
+            <span>해산물·지역·생식 여부·보관 상태·개인 조건을 조합해 공식 데이터 기준의 행동을 안내합니다.</span>
+            <span>입력 내용은 브라우저에서만 처리합니다.</span>
           </p>
         </div>
         <DataStatusBanner
