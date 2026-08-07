@@ -50,6 +50,16 @@ function isStale(observedAt?: string, maxAgeDays = 7): boolean {
   return Date.now() - parsed.getTime() > maxAgeDays * 24 * 60 * 60 * 1000;
 }
 
+function marineDateParam(date: Date): string {
+  const korea = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const month = korea.getUTCMonth() + 1;
+  const day = korea.getUTCDate();
+  const year = String(korea.getUTCFullYear()).slice(-2);
+  const hour = String(korea.getUTCHours()).padStart(2, '0');
+  const minute = String(korea.getUTCMinutes()).padStart(2, '0');
+  return `${month}/${day}/${year} ${hour}:${minute}`;
+}
+
 function corsHeaders(request: Request, env: Env): HeadersInit {
   const origin = request.headers.get('Origin') ?? '';
   const allowed = env.ALLOWED_ORIGIN ?? 'http://localhost:5173';
@@ -128,6 +138,15 @@ export function parseMarineJson(body: unknown): MarineWaterRecord[] {
   })).filter((item) => item.observedAt || item.waterTemperature !== undefined || item.ph !== undefined);
 }
 
+function marineTotalCount(body: unknown): number | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const root = body as Record<string, unknown>;
+  const bodyObject = root.body && typeof root.body === 'object' ? root.body as Record<string, unknown> : root;
+  const value = bodyObject.totalCount;
+  const count = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(count) ? count : undefined;
+}
+
 function parseRecallJson(body: unknown): RecallRecord[] | null {
   if (!body || typeof body !== 'object') return null;
   const root = body as Record<string, unknown>;
@@ -164,17 +183,39 @@ async function marine(request: Request, env: Env): Promise<ApiResponse<MarineWat
   try {
     const url = new URL(env.MARINE_WATER_API_URL);
     if (!url.searchParams.has('serviceKey')) url.searchParams.set('serviceKey', serviceKey(env.DATA_GO_KR_SERVICE_KEY));
-    if (!url.searchParams.has('pageNo')) url.searchParams.set('pageNo', '1');
-    if (!url.searchParams.has('numOfRows')) url.searchParams.set('numOfRows', '50');
+    url.searchParams.set('wtch_dt_start', marineDateParam(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)));
+    url.searchParams.set('wtch_dt_end', marineDateParam(new Date()));
+    url.searchParams.set('_type', 'json');
+    url.searchParams.set('pageNo', '1');
+    url.searchParams.set('numOfRows', '50');
     const upstreamResponse = await upstream(url.toString());
     if (!upstreamResponse.ok) return response<MarineWaterRecord[]>(SOURCES.marine, 'error', null, `해양 API 응답 오류 (${upstreamResponse.status})`);
     const body = await upstreamResponse.text();
     let records: MarineWaterRecord[] = [];
+    let totalCount: number | undefined;
     if (upstreamResponse.headers.get('content-type')?.includes('json')) {
-      try { records = parseMarineJson(JSON.parse(body) as unknown); } catch { records = []; }
+      try {
+        const parsed = JSON.parse(body) as unknown;
+        records = parseMarineJson(parsed);
+        totalCount = marineTotalCount(parsed);
+      } catch { records = []; }
     } else {
       records = parseMarineXml(body);
     }
+    const lastPage = totalCount ? Math.ceil(totalCount / 50) : 1;
+    if (lastPage > 1) {
+      url.searchParams.set('pageNo', String(lastPage));
+      const latestResponse = await upstream(url.toString());
+      if (latestResponse.ok) {
+        const latestBody = await latestResponse.text();
+        if (latestResponse.headers.get('content-type')?.includes('json')) {
+          try { records = parseMarineJson(JSON.parse(latestBody) as unknown); } catch { records = []; }
+        } else {
+          records = parseMarineXml(latestBody);
+        }
+      }
+    }
+    records.sort((left, right) => right.observedAt.localeCompare(left.observedAt));
     if (!records.length) return response<MarineWaterRecord[]>(SOURCES.marine, 'unavailable', null, '해양 API 응답에서 확인 가능한 관측값이 없습니다.');
     return { ...response(SOURCES.marine, 'success', records), observedAt: records[0].observedAt, stale: isStale(records[0].observedAt), message: isStale(records[0].observedAt) ? '공식 응답은 확인됐지만 관측 시각이 오래되어 최신 정보로 판단하지 않습니다.' : undefined };
   } catch { return response<MarineWaterRecord[]>(SOURCES.marine, 'error', null, '해양 API 요청을 처리하지 못했습니다.'); }
