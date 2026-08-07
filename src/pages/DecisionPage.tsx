@@ -5,7 +5,7 @@ import { Card, RiskBars, SourceLine } from "../components/UI";
 import DataStatusBanner from "../components/DataStatusBanner";
 import OfficialAnalysisNotice from "../components/OfficialAnalysisNotice";
 import { fetchRealtimeSnapshot } from "../services/api";
-import { evaluateDecision } from "../logic/decisionEngine";
+import { calculatePersonalRiskScore, countPersonalRiskConditions, evaluateDecision } from "../logic/decisionEngine";
 import type { RealtimeSnapshot } from "../services/types";
 import type {
   DecisionInput,
@@ -374,6 +374,8 @@ function DecisionResultCard({
         region={result.regionRisk}
         personal={result.personalRisk}
         storage={result.storageRisk}
+        personalScore={calculatePersonalRiskScore(input.conditions)}
+        personalConditionCount={countPersonalRiskConditions(input.conditions)}
       />
       <OfficialAnalysisNotice analysis={snapshot?.recalls.analysis} />
       <div className="reason-columns">

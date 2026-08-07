@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import regions from '../data/regions.json';
-import { evaluateDecision } from './decisionEngine';
+import { calculatePersonalRiskScore, countPersonalRiskConditions, evaluateDecision } from './decisionEngine';
 import type { DecisionInput, Region } from '../types';
 
 const base: DecisionInput = { seafood: '굴', regionId: 'songjeong', raw: false, storageMode: '냉장', storageHours: 6, temperature: 4, conditions: [] };
@@ -25,5 +25,10 @@ describe('evaluateDecision', () => {
     const result = evaluateDecision({ ...base, raw: true, conditions: ['임신'] }, typedRegions);
     expect(result.level).toBe('섭취 주의');
     expect(result.personalRisk).toBe('caution');
+  });
+  it('복수 개인 주의조건은 화면용 지표에 합산하고 알레르기는 최우선으로 표시한다', () => {
+    expect(countPersonalRiskConditions(['면역저하', '간질환'])).toBe(2);
+    expect(calculatePersonalRiskScore(['면역저하', '간질환'])).toBe(70);
+    expect(calculatePersonalRiskScore(['알레르기', '면역저하'])).toBe(100);
   });
 });
