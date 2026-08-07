@@ -21,6 +21,16 @@ describe('evaluateDecision', () => {
   it('최신 데이터가 없는 지역은 정보 부족으로 반환한다', () => {
     expect(evaluateDecision({ ...base, regionId: 'dadaepo' }, typedRegions).level).toBe('정보 부족');
   });
+  it('지역을 모를 때는 지역 위험을 추정하지 않고 정보 부족으로 안내한다', () => {
+    const result = evaluateDecision({ ...base, regionId: 'unknown' }, typedRegions);
+    expect(result).toMatchObject({ level: '정보 부족', regionRisk: 'unknown' });
+    expect(result.headline).toContain('확인 필요');
+  });
+  it('수입산은 부산 연안 관측값 대신 원산지 확인 안내를 한다', () => {
+    const result = evaluateDecision({ ...base, regionId: 'imported' }, typedRegions);
+    expect(result).toMatchObject({ level: '정보 부족', regionRisk: 'unknown' });
+    expect(result.reasons.join(' ')).toContain('수입산');
+  });
   it('고위험군의 생식은 섭취 주의로 반환한다', () => {
     const result = evaluateDecision({ ...base, raw: true, conditions: ['임신'] }, typedRegions);
     expect(result.level).toBe('섭취 주의');

@@ -71,6 +71,17 @@ export function evaluateDecision(input: DecisionInput, regions: Region[], refere
     return result('섭취 주의', '보관 정보 추가 확인 필요', reasons, actions, regionRisk, personal, storage.level, region, referenceDate);
   }
 
+  if (!region) {
+    if (input.regionId === 'imported') {
+      reasons.push('수입산은 부산 연안 지역 관측값과 직접 연결할 수 없어, 원산지와 수입·회수 정보를 별도로 확인해야 합니다.');
+      actions.push('포장지의 원산지·수입업소·회수 안내를 확인하고, 알 수 없으면 생식은 피하세요.');
+    } else {
+      reasons.push('구입 또는 채취 지역을 알 수 없어 지역별 패류독소·해양환경 정보를 연결할 수 없습니다.');
+      actions.push('구매처에 원산지 또는 채취 지역을 확인한 뒤 다시 판정하세요. 확인 전에는 생식을 피하세요.');
+    }
+    return result('정보 부족', '원산지 또는 채취 지역 확인 필요', reasons, actions, 'unknown', personal, storage.level, undefined, referenceDate);
+  }
+
   if (realtime) {
     if (region && snapshotHasOfficialDanger(realtime, region, input.seafood)) {
       reasons.push('공식 회수·판매중지 또는 선택 지역과 연결된 위험정보가 확인되었습니다.');

@@ -18,6 +18,10 @@ import type {
 } from "../types";
 
 const typedRegions = regions as Region[];
+const additionalRegionOptions = [
+  { id: "unknown", name: "잘 모르겠음" },
+  { id: "imported", name: "수입산" },
+] as const;
 const seafoodOptions: Seafood[] = [
   "굴",
   "홍합",
@@ -76,10 +80,11 @@ export default function DecisionPage() {
                 condition,
               ],
     }));
-  const region = useMemo(
+  const regionName = useMemo(
     () =>
-      typedRegions.find((item) => item.id === input.regionId) ??
-      typedRegions[0],
+      typedRegions.find((item) => item.id === input.regionId)?.name ??
+      additionalRegionOptions.find((item) => item.id === input.regionId)?.name ??
+      "잘 모르겠음",
     [input.regionId],
   );
 
@@ -186,6 +191,13 @@ export default function DecisionPage() {
                 {item.name}
               </option>
             ))}
+            <optgroup label="지역을 모를 때">
+              {additionalRegionOptions.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </Field>
         <Field label="섭취 방법">
@@ -258,7 +270,7 @@ export default function DecisionPage() {
         </Field>
         <div className="form-preview">
           <span>선택 지역</span>
-          <strong>{region.name}</strong>
+          <strong>{regionName}</strong>
           <span>보관</span>
           <strong>{input.storageSituation}</strong>
           <span>제품 상태</span>
@@ -279,7 +291,7 @@ export default function DecisionPage() {
         <DecisionResultCard
           result={result}
           input={input}
-          region={region}
+          regionName={regionName}
           snapshot={snapshot}
           onReset={() => setResult(null)}
         />
@@ -311,13 +323,13 @@ function Field({
 function DecisionResultCard({
   result,
   input,
-  region,
+  regionName,
   snapshot,
   onReset,
 }: {
   result: DecisionResult;
   input: DecisionInput;
-  region: Region;
+  regionName: string;
   snapshot: RealtimeSnapshot | null;
   onReset: () => void;
 }) {
@@ -326,7 +338,7 @@ function DecisionResultCard({
     typeof navigator !== "undefined" &&
     "share" in navigator &&
     typeof (navigator as Navigator & { share?: unknown }).share === "function";
-  const shareText = `안심海 판정: ${result.headline}\n해산물 ${input.seafood} · 지역 ${region.name}\n${result.actions[0]}`;
+  const shareText = `안심海 판정: ${result.headline}\n해산물 ${input.seafood} · 지역 ${regionName}\n${result.actions[0]}`;
   const share = async () => {
     if (canShare)
       await navigator.share({
