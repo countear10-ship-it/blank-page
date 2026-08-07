@@ -48,6 +48,9 @@ const SOURCES = {
 
 const RECALL_CACHE_TTL_SECONDS = 6 * 60 * 60;
 const RECALL_RETRY_DELAYS_MS = [350, 700] as const;
+const MARINE_CACHE_TTL_SECONDS = 24 * 60 * 60;
+const MARINE_RETRY_DELAYS_MS = [350] as const;
+const MARINE_REQUEST_TIMEOUT_MS = 5_000;
 
 function now(): string { return new Date().toISOString(); }
 function response<T>(source: ApiSource, status: ApiResponse<T>['status'], data: T | null, message?: string): ApiResponse<T> { return { status, data, source, fetchedAt: now(), stale: false, ...(message ? { message } : {}) }; }
@@ -301,6 +304,54 @@ async function storeRecallSuccess(query: string, body: ApiResponse<RecallRecord[
   await caches.default.put(recallCacheKey(query), cached);
 }
 
+function marineCacheKey(): Request {
+  return new Request('https://seasafe-busan-api-cache.invalid/marine-water');
+}
+
+async function marineFallback(message: string): Promise<ApiResponse<MarineWaterRecord[]> | null> {
+  const cached = await caches.default.match(marineCacheKey());
+  if (!cached) return null;
+  try {
+    const stored = await cached.json() as ApiResponse<MarineWaterRecord[]>;
+    if (stored.status !== 'success' || !stored.data?.length) return null;
+    const lastObservedAt = stored.observedAt ?? stored.data[0]?.observedAt ?? stored.fetchedAt;
+    return {
+      ...stored,
+      fetchedAt: now(),
+      stale: true,
+      message: `해양 관측 API가 일시 지연되어 마지막으로 정상 수집한 공식 관측값을 표시합니다. 마지막 관측: ${lastObservedAt}. ${message}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function storeMarineSuccess(body: ApiResponse<MarineWaterRecord[]>): Promise<void> {
+  const cached = new Response(JSON.stringify(body), {
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': `public, max-age=${MARINE_CACHE_TTL_SECONDS}`,
+    },
+  });
+  await caches.default.put(marineCacheKey(), cached);
+}
+
+async function upstreamWithRetries(url: string, retryDelays: readonly number[]): Promise<Response> {
+  let latestResponse: Response | undefined;
+  for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
+    try {
+      latestResponse = await upstream(url, { signal: AbortSignal.timeout(MARINE_REQUEST_TIMEOUT_MS) });
+    } catch {
+      if (attempt === retryDelays.length) throw new Error('Marine upstream timed out');
+      await wait(retryDelays[attempt]);
+      continue;
+    }
+    if (latestResponse.ok || attempt === retryDelays.length) return latestResponse;
+    await wait(retryDelays[attempt]);
+  }
+  return latestResponse as Response;
+}
+
 function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -401,8 +452,11 @@ async function marine(request: Request, env: Env): Promise<ApiResponse<MarineWat
     url.searchParams.set('_type', 'json');
     url.searchParams.set('pageNo', '1');
     url.searchParams.set('numOfRows', '50');
-    const upstreamResponse = await upstream(url.toString());
-    if (!upstreamResponse.ok) return response<MarineWaterRecord[]>(SOURCES.marine, 'error', null, `해양 API 응답 오류 (${upstreamResponse.status})`);
+    const upstreamResponse = await upstreamWithRetries(url.toString(), MARINE_RETRY_DELAYS_MS);
+    if (!upstreamResponse.ok) {
+      return (await marineFallback(`해양 API 응답 오류 (${upstreamResponse.status})`))
+        ?? response<MarineWaterRecord[]>(SOURCES.marine, 'error', null, `해양 API 응답 오류 (${upstreamResponse.status})`);
+    }
     const body = await upstreamResponse.text();
     let records: MarineWaterRecord[] = [];
     let totalCount: number | undefined;
@@ -418,7 +472,7 @@ async function marine(request: Request, env: Env): Promise<ApiResponse<MarineWat
     const lastPage = totalCount ? Math.ceil(totalCount / 50) : 1;
     if (lastPage > 1) {
       url.searchParams.set('pageNo', String(lastPage));
-      const latestResponse = await upstream(url.toString());
+      const latestResponse = await upstreamWithRetries(url.toString(), MARINE_RETRY_DELAYS_MS);
       if (latestResponse.ok) {
         const latestBody = await latestResponse.text();
         if (latestResponse.headers.get('content-type')?.includes('json')) {
@@ -429,9 +483,22 @@ async function marine(request: Request, env: Env): Promise<ApiResponse<MarineWat
       }
     }
     records.sort((left, right) => right.observedAt.localeCompare(left.observedAt));
-    if (!records.length) return response<MarineWaterRecord[]>(SOURCES.marine, 'unavailable', null, '해양 API 응답에서 확인 가능한 관측값이 없습니다.');
-    return { ...response(SOURCES.marine, 'success', records), observedAt: records[0].observedAt, stale: isStale(records[0].observedAt), message: isStale(records[0].observedAt) ? '공식 응답은 확인됐지만 관측 시각이 오래되어 최신 정보로 판단하지 않습니다.' : undefined };
-  } catch { return response<MarineWaterRecord[]>(SOURCES.marine, 'error', null, '해양 API 요청을 처리하지 못했습니다.'); }
+    if (!records.length) {
+      return (await marineFallback('해양 API 응답에서 확인 가능한 관측값이 없습니다.'))
+        ?? response<MarineWaterRecord[]>(SOURCES.marine, 'unavailable', null, '해양 API 응답에서 확인 가능한 관측값이 없습니다.');
+    }
+    const result = {
+      ...response(SOURCES.marine, 'success', records),
+      observedAt: records[0].observedAt,
+      stale: isStale(records[0].observedAt),
+      message: isStale(records[0].observedAt) ? '공식 응답은 확인됐지만 관측 시각이 오래되어 최신 정보로 판단하지 않습니다.' : undefined,
+    };
+    await storeMarineSuccess(result);
+    return result;
+  } catch {
+    return (await marineFallback('해양 API 요청을 처리하지 못했습니다.'))
+      ?? response<MarineWaterRecord[]>(SOURCES.marine, 'error', null, '해양 API 요청을 처리하지 못했습니다.');
+  }
 }
 
 async function recalls(request: Request, env: Env): Promise<ApiResponse<RecallRecord[]>> {
