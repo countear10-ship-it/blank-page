@@ -25,7 +25,6 @@ export interface Region {
   sourceName: string;
   sourceUrl: string;
   riskHistory: RiskHistoryPoint[];
-  dataStatus: '시연용 데이터';
 }
 
 export interface DecisionInput {

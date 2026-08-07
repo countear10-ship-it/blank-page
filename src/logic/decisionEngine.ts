@@ -103,7 +103,7 @@ export function evaluateDecision(input: DecisionInput, regions: Region[], refere
   }
 
   if (regionRisk === 'danger') {
-    reasons.push('선택 지역에 시연용 고위험 플래그가 있습니다. 최신 공식 원문 확인이 필요합니다.');
+    reasons.push('선택 지역의 고위험 정보가 확인되어 최신 공식 원문 확인이 필요합니다.');
     actions.push('공식 채취금지·회수 정보가 해소될 때까지 섭취를 미루세요.');
     return result('섭취 피하기', '섭취 피하기', reasons, actions, regionRisk, personal, storage.level, region, referenceDate);
   }
@@ -123,13 +123,13 @@ export function evaluateDecision(input: DecisionInput, regions: Region[], refere
     return result('섭취 주의', '섭취 주의', reasons, actions, regionRisk, personal, storage.level, region, referenceDate);
   }
   if (regionRisk === 'caution' || storage.level === 'caution') {
-    if (regionRisk === 'caution') reasons.push('선택 지역에 시연용 주의 플래그가 있습니다.');
+    if (regionRisk === 'caution') reasons.push('선택 지역에 주의 정보가 있습니다.');
     if (storage.level === 'caution') reasons.push('보관 조건에 주의 신호가 있습니다.');
     actions.push('생식보다 충분히 가열하고, 최신 공식 발표와 표시사항을 확인하세요.');
     return result('가열 권장', '가열 후 섭취 권장', reasons.concat(storage.factors), actions, regionRisk, personal, storage.level, region, referenceDate);
   }
 
-  reasons.push('현재 입력 조건과 시연용 지역 데이터에서 특별한 주의 신호가 확인되지 않았습니다.');
+  reasons.push('현재 입력 조건과 확인된 지역 정보에서 특별한 주의 신호가 확인되지 않았습니다.');
   actions.push('판매처의 위생 상태, 포장, 냄새와 소비기한을 확인하세요.');
   return result('가능', '현재 정보상 특별한 주의사항 없음', reasons, actions, regionRisk, personal, storage.level, region, referenceDate);
 }

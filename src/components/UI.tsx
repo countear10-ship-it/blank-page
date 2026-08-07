@@ -14,8 +14,6 @@ export function RiskBadge({ level, compact = false }: { level: RiskLevel; compac
   return <span className={`risk-badge risk-${level} ${compact ? 'compact' : ''}`}><span aria-hidden="true">{meta.icon}</span> {compact ? meta.label.split(' ')[0] : meta.label}</span>;
 }
 
-export function DemoBadge() { return <span className="demo-badge">시연용 데이터</span>; }
-
 export function SourceLine({ name, url, date }: { name: string; url: string; date?: string }) {
   return <div className="source-line"><Info size={14} aria-hidden="true" /><span>{date ? `기준일 ${date} · ` : ''}{name}</span><a href={url} target="_blank" rel="noreferrer">원문 <ArrowUpRight size={13} /></a></div>;
 }
@@ -42,5 +40,5 @@ export function RiskHistoryChart({ points, title = '최근 위험 변화' }: { p
 export function TrustNotice() { return <div className="trust-notice"><ShieldAlert size={18} aria-hidden="true" /><div><strong>안전 보장이 아닌 정보 지원</strong><p>안심海는 의료 진단이나 안전 보증 서비스가 아닙니다. 최신 공식 원문과 판매처 안내를 함께 확인하세요.</p></div></div>; }
 
 export function RiskSummaryCard({ region }: { region: Region }) {
-  return <Card className="region-summary-card"><div className="card-topline"><RiskBadge level={region.riskLevel} /><DemoBadge /></div><h3>{region.name}</h3><p>{region.summary}</p><div className="mini-facts"><span><b>관련 해산물</b>{region.affectedSeafood.join(' · ')}</span><span><b>수온·환경</b>{region.waterTemperature}</span><span><b>패류독소</b>{region.toxinStatus}</span><span><b>검사 정보</b>{region.radiationStatus}</span></div><p className="recommendation"><strong>필요한 행동</strong>{region.recommendation}</p><SourceLine name={region.sourceName} url={region.sourceUrl} date={region.updatedAt} /></Card>;
+  return <Card className="region-summary-card"><div className="card-topline"><RiskBadge level={region.riskLevel} /></div><h3>{region.name}</h3><p>{region.summary}</p><div className="mini-facts"><span><b>관련 해산물</b>{region.affectedSeafood.join(' · ')}</span><span><b>수온·환경</b>{region.waterTemperature}</span><span><b>패류독소</b>{region.toxinStatus}</span><span><b>검사 정보</b>{region.radiationStatus}</span></div><p className="recommendation"><strong>필요한 행동</strong>{region.recommendation}</p><SourceLine name={region.sourceName} url={region.sourceUrl} date={region.updatedAt} /></Card>;
 }

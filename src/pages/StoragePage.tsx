@@ -1,7 +1,7 @@
 import { AlertTriangle, ShieldAlert, Thermometer } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { Card, DemoBadge, RiskBadge, RiskHistoryChart, SourceLine } from '../components/UI';
+import { Card, RiskBadge, RiskHistoryChart, SourceLine } from '../components/UI';
 import { calculateStorageRisk, STORAGE_MICROBE_SOURCE, storageRiskSignals } from '../logic/storageRules';
 import type { StorageInput } from '../types';
 
@@ -44,7 +44,6 @@ export default function StoragePage() {
         <Card className="storage-chart-card">
           <div className="preview-head">
             <span>시간 경과별 보관 위험 지표</span>
-            <DemoBadge />
           </div>
           <div className="storage-chart-score">
             <span>현재 입력</span>

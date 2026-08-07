@@ -62,7 +62,7 @@ export default function HomePage() {
 
       <section className="home-section">
         <SectionTitle eyebrow="MAKE A SAFER CHOICE" title="안심海가 도와드리는 것" />
-        <div className="feature-grid"><FeatureCard icon={<MapPinned />} title="부산 위험지도" text="패류독소 속보·회수정보·해양환경 응답을 원문 링크와 함께 확인해요." to="/map" accent="teal" /><FeatureCard icon={<Fish />} title="먹어도 될까?" text="해산물·지역·생식 여부·개인 조건을 규칙 엔진으로 조합해 행동을 안내해요." to="/decision" accent="coral" featured /><FeatureCard icon={<Snowflake />} title="보관 시뮬레이터" text="사진은 내 기기에서만 처리하고, 시간·온도별 외관 변화를 교육용으로 보여줘요." to="/storage" accent="blue" /></div>
+        <div className="feature-grid"><FeatureCard icon={<MapPinned />} title="부산 위험지도" text="패류독소 속보·회수정보·해양환경 응답을 원문 링크와 함께 확인해요." to="/map" accent="teal" /><FeatureCard icon={<Fish />} title="먹어도 될까?" text="해산물·지역·생식 여부·개인 조건을 규칙 엔진으로 조합해 행동을 안내해요." to="/decision" accent="coral" featured /><FeatureCard icon={<Snowflake />} title="보관 위험 안내" text="소비자가 확인한 보관 상태를 바탕으로 시간별 위험 신호를 그래프로 보여줘요." to="/storage" accent="blue" /></div>
       </section>
 
       <section className="quiz-callout">
