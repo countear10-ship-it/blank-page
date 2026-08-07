@@ -40,6 +40,12 @@ export interface WeatherObservation {
   observedAt: string;
 }
 
+export interface MarineForecastObservation {
+  seaSurfaceTemperature?: number;
+  waveHeight?: number;
+  observedAt: string;
+}
+
 export interface RecallRecord {
   productName: string;
   companyName?: string;

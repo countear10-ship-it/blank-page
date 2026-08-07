@@ -6,16 +6,15 @@ import regions from "../data/regions.json";
 import { Card, RiskBadge, SourceLine } from "../components/UI";
 import DataStatusBanner from "../components/DataStatusBanner";
 import OfficialAnalysisNotice from "../components/OfficialAnalysisNotice";
-import { fetchRealtimeSnapshot, fetchRegionWeather } from "../services/api";
+import { fetchRealtimeSnapshot, fetchRegionMarineForecast, fetchRegionWeather } from "../services/api";
 import {
   assessRegion,
-  latestMarineRecord,
   viewState,
   type RegionRiskAssessment,
 } from "../services/riskEngine";
 import type { Region, RiskLevel } from "../types";
 import { assessWeatherEnvironment } from "../logic/weatherEnvironment";
-import type { ApiResponse, RealtimeSnapshot, WeatherObservation } from "../services/types";
+import type { ApiResponse, MarineForecastObservation, RealtimeSnapshot, WeatherObservation } from "../services/types";
 
 const typedRegions = regions as Region[];
 const mapCenter: [number, number] = [35.14, 129.08];
@@ -30,6 +29,7 @@ export default function MapPage() {
   const [selectedId, setSelectedId] = useState("gijang");
   const [snapshot, setSnapshot] = useState<RealtimeSnapshot | null>(null);
   const [weather, setWeather] = useState<ApiResponse<WeatherObservation> | null>(null);
+  const [marineForecasts, setMarineForecasts] = useState<Map<string, ApiResponse<MarineForecastObservation>>>(new Map());
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
@@ -43,6 +43,15 @@ export default function MapPage() {
     return () => {
       active = false;
     };
+  }, []);
+  useEffect(() => {
+    let active = true;
+    Promise.all(typedRegions.map(async (region) => (
+      [region.id, await fetchRegionMarineForecast(region.latitude, region.longitude)] as const
+    ))).then((entries) => {
+      if (active) setMarineForecasts(new Map(entries));
+    });
+    return () => { active = false; };
   }, []);
 
   const assessments = useMemo(
@@ -72,6 +81,7 @@ export default function MapPage() {
     return () => { active = false; };
   }, [selected.latitude, selected.longitude]);
   const weatherEnvironment = assessWeatherEnvironment(weather?.data);
+  const selectedMarineForecast = marineForecasts.get(selected.id);
   const globalState = loading
     ? "loading"
     : snapshot
@@ -84,10 +94,7 @@ export default function MapPage() {
         ? "latest"
         : viewState(snapshot.marine)
       : "error";
-  const latestMarine = latestMarineRecord(snapshot?.marine.data);
-  const marine = selectedAssessment.marine ?? latestMarine;
-  const usingLatestFallback =
-    !selectedAssessment.marine && Boolean(latestMarine);
+  const marine = selectedAssessment.marine;
 
   return (
     <div className="container page-stack">
@@ -203,6 +210,7 @@ export default function MapPage() {
           {typedRegions.map((region) => {
             const assessment =
               assessments.get(region.id) ?? loadingAssessment();
+            const marineForecast = marineForecasts.get(region.id);
             return (
               <button
                 key={region.id}
@@ -216,10 +224,14 @@ export default function MapPage() {
                   <small>
                     {assessment.state === "loading"
                       ? "확인 중"
-                      : assessment.summary}
+                      : formatMarineReference(marineForecast?.data) ?? assessment.summary}
                   </small>
                 </span>
-                <RiskBadge level={assessment.level} compact />
+                {assessment.level === "unknown" && marineForecast?.data ? (
+                  <span className="marine-reference-badge compact">해양 참고</span>
+                ) : (
+                  <RiskBadge level={assessment.level} compact />
+                )}
               </button>
             );
           })}
@@ -231,10 +243,25 @@ export default function MapPage() {
             <MapPinned size={19} />
             <h2>{selected.name}</h2>
           </div>
-          <RiskBadge level={selectedAssessment.level} />
+          {selectedAssessment.level === "unknown" && selectedMarineForecast?.data ? (
+            <span className="marine-reference-badge">해양환경 참고</span>
+          ) : (
+            <RiskBadge level={selectedAssessment.level} />
+          )}
           <DataStatusBanner state={selectedAssessment.state} compact />
         </div>
         <p className="lead-copy">{selectedAssessment.summary}</p>
+        {selectedMarineForecast?.data && (
+          <section className="marine-reference-card" aria-label="최신 해양환경 참고값">
+            <div>
+              <span>최신 해양환경 참고</span>
+              <strong>{formatMarineReference(selectedMarineForecast.data)}</strong>
+            </div>
+            <p>{formatDateTime(selectedMarineForecast.data.observedAt)} 기준 · 선택 지역과 가장 가까운 해상 격자값</p>
+            <small>모델 기반 참고값으로, 공식 수질검사·패류독소·회수 정보나 해산물 섭취 안전을 판정하지 않습니다.</small>
+            <a href={selectedMarineForecast.source.url} target="_blank" rel="noreferrer">해양환경 데이터 기준 보기 <ExternalLink size={13} /></a>
+          </section>
+        )}
         <section className={`weather-environment-card weather-${weatherEnvironment.level}`} aria-label="구매 이동 환경 안내">
           <div>
             <span>구매·이동 환경</span>
@@ -245,13 +272,8 @@ export default function MapPage() {
           <small>기온·습도는 해역 오염 또는 섭취 안전을 뜻하지 않으며, 구매 뒤 보냉·이동 관리 안내입니다.</small>
         </section>
         <OfficialAnalysisNotice analysis={snapshot?.recalls.analysis} />
-        {usingLatestFallback && (
-          <p className="lead-copy">
-            아래 값은 선택 지역 수치가 아니라, 공식 API에서 가장 최근에 수집한 관측값입니다.
-          </p>
-        )}
         <div className="detail-grid">
-          <Detail label="관측소" value={marine?.station ?? "관측소 확인 전"} />
+          <Detail label="공식 관측소" value={marine?.station ?? "지역 위치 정보 미제공"} />
           <Detail
             label="수온"
             value={
@@ -384,6 +406,27 @@ function loadingAssessment(): RegionRiskAssessment {
     },
   };
 }
+
+function formatMarineReference(data?: MarineForecastObservation | null): string | undefined {
+  if (!data) return undefined;
+  const values = [
+    data.seaSurfaceTemperature === undefined ? undefined : `해수면 ${data.seaSurfaceTemperature}℃`,
+    data.waveHeight === undefined ? undefined : `파고 ${data.waveHeight}m`,
+  ].filter((value): value is string => Boolean(value));
+  return values.length > 0 ? values.join(' · ') : undefined;
+}
+
+function formatDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('ko-KR', {
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="detail-item">
