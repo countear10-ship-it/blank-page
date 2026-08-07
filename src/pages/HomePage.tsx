@@ -6,14 +6,16 @@ import { Card, RiskBadge, SectionTitle, SourceLine, TrustNotice } from '../compo
 import DataStatusBanner from '../components/DataStatusBanner';
 import regions from '../data/regions.json';
 import { loadQuizGrowthState } from '../logic/quizGrowth';
-import { fetchRealtimeSnapshot } from '../services/api';
-import type { ApiResponse, RealtimeSnapshot } from '../services/types';
+import { fetchRealtimeSnapshot, fetchRegionWeather } from '../services/api';
+import { assessRegion, latestMarineRecord, type RegionRiskAssessment } from '../services/riskEngine';
+import type { ApiResponse, RealtimeSnapshot, WeatherObservation } from '../services/types';
 import type { Region } from '../types';
 
 const typedRegions = regions as Region[];
 
 export default function HomePage() {
   const [snapshot, setSnapshot] = useState<RealtimeSnapshot | null>(null);
+  const [weatherByRegion, setWeatherByRegion] = useState<Record<string, ApiResponse<WeatherObservation>>>({});
   const [loading, setLoading] = useState(true);
   const [quizGrowth] = useState(() => loadQuizGrowthState(typeof window === 'undefined' ? undefined : window.localStorage));
 
@@ -23,6 +25,17 @@ export default function HomePage() {
       if (active) setSnapshot(data);
     }).finally(() => {
       if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all(typedRegions.slice(0, 3).map(async (region) => [
+      region.id,
+      await fetchRegionWeather(region.latitude, region.longitude),
+    ] as const)).then((entries) => {
+      if (active) setWeatherByRegion(Object.fromEntries(entries));
     });
     return () => { active = false; };
   }, []);
@@ -57,7 +70,7 @@ export default function HomePage() {
       <TrustNotice />
       <section className="home-section">
         <SectionTitle eyebrow="BUSAN COAST WATCH" title="부산 연안 주의정보"><Link className="text-link" to="/map">전체 지도 보기 <ArrowRight size={15} /></Link></SectionTitle>
-        <div className="summary-grid"><Card className="summary-highlight"><div className="summary-icon"><MapPinned size={22} /></div><strong>{typedRegions.length}개 지역</strong><span>기장부터 다대포까지</span><b className="warning-text">실시간 응답 후 지역별 상태 갱신</b><Link to="/map" className="inline-link">공식 원문 확인 <ArrowRight size={14} /></Link></Card>{typedRegions.slice(0, 3).map((region) => <div className="region-row" key={region.id}><div className="region-pin pin-unknown" /><div><strong>{region.name}</strong><span>정적 지역 위치 정보 · 최신 응답 확인 필요</span></div><RiskBadge level="unknown" compact /></div>)}</div>
+        <div className="summary-grid"><Card className="summary-highlight"><div className="summary-icon"><MapPinned size={22} /></div><strong>{typedRegions.length}개 지역</strong><span>기장부터 다대포까지</span><b className="warning-text">공식 응답과 현재 날씨를 함께 확인</b><Link to="/map" className="inline-link">공식 원문 확인 <ArrowRight size={14} /></Link></Card>{typedRegions.slice(0, 3).map((region) => <HomeRegionCard key={region.id} region={region} snapshot={snapshot} weather={weatherByRegion[region.id]} loading={loading} />)}</div>
       </section>
 
       <section className="home-section">
@@ -80,6 +93,25 @@ export default function HomePage() {
 function LiveStatus({ icon, label, response, loading }: { icon: React.ReactNode; label: string; response?: ApiResponse<unknown>; loading: boolean }) {
   const state = loading ? 'loading' : response?.analysis ? 'assisted' : response?.status === 'success' ? 'latest' : response?.status === 'error' ? 'error' : response?.status === 'unavailable' ? 'unavailable' : 'no-data';
   return <div className="live-status-card"><span className="live-status-icon">{icon}</span><div><strong>{label}</strong><DataStatusBanner state={state} compact /></div></div>;
+}
+
+function HomeRegionCard({ region, snapshot, weather, loading }: { region: Region; snapshot: RealtimeSnapshot | null; weather?: ApiResponse<WeatherObservation>; loading: boolean }) {
+  const assessment: RegionRiskAssessment | undefined = snapshot ? assessRegion(region, snapshot) : undefined;
+  const fallbackMarine = latestMarineRecord(snapshot?.marine.data);
+  const marine = assessment?.marine;
+  const marineText = marine?.waterTemperature !== undefined
+    ? `${marine.station} · 수온 ${marine.waterTemperature}℃`
+    : fallbackMarine?.waterTemperature !== undefined
+      ? `최근 관측 수온 ${fallbackMarine.waterTemperature}℃ · 지역 직접 관측 아님`
+      : '해양 관측값 확인 중';
+  const weatherText = weather?.data
+    ? `현재 기온 ${weather.data.temperature}℃ · 습도 ${weather.data.relativeHumidity}%`
+    : '현재 날씨 확인 중';
+  const summary = loading
+    ? '공식 안전정보 확인 중'
+    : assessment?.summary ?? '공식 안전정보를 불러오지 못했습니다.';
+  const level = assessment?.level ?? 'unknown';
+  return <div className="region-row"><div className={`region-pin pin-${level}`} /><div className="region-row-copy"><strong>{region.name}</strong><span className="region-status-copy">{summary}</span><div className="region-live-facts"><span>{marineText}</span><span>{weatherText}</span></div></div><RiskBadge level={level} compact /></div>;
 }
 
 function formatDate(value: string) {
