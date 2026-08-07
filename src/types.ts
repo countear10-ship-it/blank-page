@@ -59,7 +59,7 @@ export interface StorageInput {
 
 export interface StorageResult {
   level: RiskLevel;
-  score: number;
+  signalStep: 1 | 2 | 3;
   label: string;
   factors: string[];
   recommendation: string;

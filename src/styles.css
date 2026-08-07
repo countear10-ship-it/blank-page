@@ -300,6 +300,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .official-fallback-card p { margin: 6px 0 10px; font-size: .69rem; line-height: 1.55; }
 .official-fallback-card div { display: flex; flex-wrap: wrap; gap: 7px; }
 .official-fallback-card a { padding: 6px 8px; color: var(--ocean-700); background: #fff; border: 1px solid #ead6a4; border-radius: 7px; font-size: .64rem; font-weight: 800; }
+.evidence-formula-card { margin-top: 14px; padding: 14px; color: var(--text-secondary); background: var(--seafoam-100); border: 1px solid #ccecea; border-radius: 12px; }
+.evidence-formula-card strong { display: block; color: var(--ocean-700); font-size: .77rem; }
+.evidence-formula-card p { margin: 6px 0; color: var(--ocean-900); font-size: .72rem; font-weight: 800; line-height: 1.5; }
+.evidence-formula-card small { display: block; font-size: .66rem; line-height: 1.5; }
+.evidence-formula-card div { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.evidence-formula-card a { padding: 6px 8px; color: var(--ocean-700); background: #fff; border: 1px solid #b7e0de; border-radius: 7px; font-size: .64rem; font-weight: 800; }
 .medical-note { color: var(--text-secondary); }
 
 /* Storage, quiz and about */

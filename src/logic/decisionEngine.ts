@@ -16,14 +16,6 @@ function personalRisk(conditions: PersonalCondition[]): RiskLevel {
   return conditions.some((condition) => HIGH_RISK_CONDITIONS.includes(condition)) ? 'caution' : 'safe';
 }
 
-// 선택한 주의조건의 개수를 합산해 보여 주는 화면용 지표입니다.
-// 의료 위험 점수나 최종 섭취 판정에는 사용하지 않습니다.
-export function calculatePersonalRiskScore(conditions: PersonalCondition[]): number {
-  if (conditions.includes('알레르기')) return 100;
-  const count = conditions.filter((condition) => HIGH_RISK_CONDITIONS.includes(condition)).length;
-  return count ? Math.min(95, count * 35) : 26;
-}
-
 export function countPersonalRiskConditions(conditions: PersonalCondition[]): number {
   return conditions.filter((condition) => HIGH_RISK_CONDITIONS.includes(condition)).length;
 }

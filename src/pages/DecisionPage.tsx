@@ -5,7 +5,7 @@ import { Card, RiskBars, SourceLine } from "../components/UI";
 import DataStatusBanner from "../components/DataStatusBanner";
 import OfficialAnalysisNotice from "../components/OfficialAnalysisNotice";
 import { fetchRealtimeSnapshot } from "../services/api";
-import { calculatePersonalRiskScore, countPersonalRiskConditions, evaluateDecision } from "../logic/decisionEngine";
+import { countPersonalRiskConditions, evaluateDecision } from "../logic/decisionEngine";
 import type { RealtimeSnapshot } from "../services/types";
 import type {
   DecisionInput,
@@ -21,6 +21,10 @@ const typedRegions = regions as Region[];
 const additionalRegionOptions = [
   { id: "unknown", name: "잘 모르겠음" },
   { id: "imported", name: "수입산" },
+] as const;
+const evidenceSources = [
+  { name: "FDA 수산물 보관 기준", url: "https://www.fda.gov/food/buy-store-serve-safe-food/selecting-and-serving-fresh-and-frozen-seafood-safely" },
+  { name: "CDC 고위험군 식품안전", url: "https://www.cdc.gov/food-safety/risk-factors/index.html" },
 ] as const;
 const seafoodOptions: Seafood[] = [
   "굴",
@@ -389,10 +393,15 @@ function DecisionResultCard({
         region={result.regionRisk}
         personal={result.personalRisk}
         storage={result.storageRisk}
-        personalScore={calculatePersonalRiskScore(input.conditions)}
         personalConditionCount={countPersonalRiskConditions(input.conditions)}
         regionApplicable={input.regionId !== "unknown" && input.regionId !== "imported"}
       />
+      <div className="evidence-formula-card">
+        <strong>근거 기반 판정 공식</strong>
+        <p>최종 행동 = 공식 경고 · 보관 기준 위반 · 개인 고위험군의 생식 · 정보 확인 수준 중 가장 강한 단계</p>
+        <small>조건별 점수를 합산하지 않습니다. 알레르기·공식 회수·실온 2시간 이상은 다른 조건보다 먼저 적용합니다.</small>
+        <div>{evidenceSources.map((source) => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.name}</a>)}</div>
+      </div>
       {input.regionId !== "unknown" && input.regionId !== "imported" && result.regionRisk === "unknown" && snapshot && (
         <div className="official-fallback-card">
           <strong>해양 관측값이 없을 때 함께 확인한 공식 근거</strong>

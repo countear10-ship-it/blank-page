@@ -23,7 +23,7 @@ export default function StoragePage() {
   };
   const points = hoursOptions.map((hours) => {
     const point = calculateStorageRisk({ ...input, hours });
-    return { date: hours === 0 ? '현재' : String(hours) + 'h', value: point.score, level: point.level, label: point.label };
+    return { date: hours === 0 ? '현재' : String(hours) + 'h', value: point.signalStep, level: point.level, label: point.label };
   });
 
   return (
@@ -46,11 +46,11 @@ export default function StoragePage() {
             <span>시간 경과별 보관 위험 지표</span>
           </div>
           <div className="storage-chart-score">
-            <span>현재 입력</span>
-            <strong>{result.score}<small>/100</small></strong>
+            <span>현재 입력 기준</span>
+            <strong>{result.label}</strong>
             <RiskBadge level={result.level} compact />
           </div>
-          <RiskHistoryChart title="시간별 보관 위험 변화" points={points} />
+          <RiskHistoryChart title="시간별 보관 위험 단계 변화" points={points} ordinal />
           <p className="storage-chart-caption">시간을 바꾸면 동일한 보관 조건에서 위험 신호가 어떻게 달라지는지 확인할 수 있습니다.</p>
         </Card>
 
@@ -94,7 +94,7 @@ export default function StoragePage() {
             <p className="eyebrow">INPUT-BASED GUIDANCE</p>
             <h2>보관 위험은 <RiskBadge level={result.level} compact /> <strong>{result.label}</strong></h2>
           </div>
-          <span className="result-score">{result.score}<small>/100</small></span>
+          <span className="result-score">규칙 기반<br />판정</span>
         </div>
         <div className="storage-result-grid">
           <div>
