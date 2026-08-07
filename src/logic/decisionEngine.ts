@@ -31,7 +31,7 @@ export function evaluateDecision(input: DecisionInput, regions: Region[], refere
     if (!snapshotIsSufficient(realtime)) {
       reasons.push('필요한 공식 조회 중 일부가 완료되지 않아 최신 위험 여부를 확인할 수 없습니다.');
       actions.push('공식 원문을 직접 확인하고 판단을 보류하세요. 데이터가 확인되기 전 생식은 피하세요.');
-      return result('정보 부족', '판단할 정보 부족', reasons, actions, 'unknown', personal, storage.level, region, referenceDate);
+      return result('정보 부족', '공식 원문 추가 확인 필요', reasons, actions, 'unknown', personal, storage.level, region, referenceDate);
     }
     if (storage.level === 'danger') {
       reasons.push('입력한 시간·온도·보관 방식에서 보관 위험 신호가 높습니다.');
@@ -66,7 +66,7 @@ export function evaluateDecision(input: DecisionInput, regions: Region[], refere
   if (regionRisk === 'unknown') {
     reasons.push('선택 지역의 최신 데이터가 없어 안전 여부를 판단할 정보가 부족합니다.');
     actions.push('공식 발표일과 원문을 확인하기 전에는 생식·임의 채취를 피하세요.');
-    return result('정보 부족', '판단할 정보 부족', reasons, actions, regionRisk, personal, storage.level, region, referenceDate);
+    return result('정보 부족', '공식 원문 추가 확인 필요', reasons, actions, regionRisk, personal, storage.level, region, referenceDate);
   }
   if (storage.level === 'danger') {
     reasons.push('입력한 시간·온도·보관 방식에서 보관 위험이 높습니다.');

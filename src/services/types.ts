@@ -1,4 +1,9 @@
 export type ApiStatus = 'success' | 'unavailable' | 'error';
+export interface OfficialSourceAnalysis {
+  summary: string;
+  sourceUrls: string[];
+  analyzedAt: string;
+}
 
 export interface ApiSource {
   name: string;
@@ -13,6 +18,7 @@ export interface ApiResponse<T> {
   fetchedAt: string;
   stale: boolean;
   message?: string;
+  analysis?: OfficialSourceAnalysis;
 }
 
 export interface MarineWaterRecord {
@@ -52,4 +58,4 @@ export interface RealtimeSnapshot {
   shellfish: ApiResponse<ShellfishBulletin>;
 }
 
-export type DataViewState = 'loading' | 'latest' | 'stale' | 'no-data' | 'unavailable' | 'error' | 'manual-confirm';
+export type DataViewState = 'loading' | 'latest' | 'assisted' | 'stale' | 'no-data' | 'unavailable' | 'error' | 'manual-confirm';

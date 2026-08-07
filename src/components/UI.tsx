@@ -6,7 +6,7 @@ const riskMeta: Record<RiskLevel, { label: string; color: string; soft: string; 
   safe: { label: '현재 확인된 특별한 주의정보 없음', color: '#16845b', soft: '#e3f6ee', icon: '●' },
   caution: { label: '주의 필요', color: '#b97805', soft: '#fff4d6', icon: '▲' },
   danger: { label: '채취·섭취 주의', color: '#c84643', soft: '#ffebeb', icon: '!' },
-  unknown: { label: '최신 데이터 없음', color: '#67758b', soft: '#edf1f5', icon: '?' },
+  unknown: { label: '공식 확인 보류', color: '#67758b', soft: '#edf1f5', icon: '○' },
 };
 
 export function RiskBadge({ level, compact = false }: { level: RiskLevel; compact?: boolean }) {

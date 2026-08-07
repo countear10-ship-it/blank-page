@@ -4,4 +4,5 @@ coverage/
 github-pages-qr.png
 .DS_Store
 worker/.dev.vars
+worker/bundle-check/
 .env.local

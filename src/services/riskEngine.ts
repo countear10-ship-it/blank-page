@@ -14,6 +14,7 @@ export interface RegionRiskAssessment {
 export function viewState(response: ApiResponse<unknown>): DataViewState {
   if (response.status === 'error') return 'error';
   if (response.status === 'unavailable') return 'unavailable';
+  if (response.analysis) return 'assisted';
   if (!response.data) return 'no-data';
   if (response.stale) return 'stale';
   return 'latest';
@@ -58,7 +59,7 @@ export function assessRegion(region: Region, snapshot: RealtimeSnapshot): Region
   }
   if (snapshot.shellfish.status === 'success' && snapshot.recalls.status === 'success' && snapshot.marine.status === 'success' && !snapshot.marine.stale) {
     reasons.push('공식 데이터 응답은 도착했지만 해양환경 자료만으로 해산물의 안전을 보장할 수 없습니다.');
-    return { level: 'safe', state: 'latest', summary: '현재 확인된 공식 데이터에서 즉시 확인되는 지역 위험정보 없음', reasons, marine, recallCount, shellfish: snapshot.shellfish };
+    return { level: 'safe', state: snapshot.recalls.analysis ? 'assisted' : 'latest', summary: snapshot.recalls.analysis ? '공식 원문 보조 분석을 포함해 현재 확인된 즉시 위험정보 없음' : '현재 확인된 공식 데이터에서 즉시 확인되는 지역 위험정보 없음', reasons, marine, recallCount, shellfish: snapshot.shellfish };
   }
   if (snapshot.marine.status === 'success' && snapshot.shellfish.status === 'success' && snapshot.recalls.status === 'unavailable') {
     reasons.push('해양관측과 패류독소 속보는 확인됐지만 회수·판매중지 정보의 실시간 응답이 일시적으로 지연됩니다.');

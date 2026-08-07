@@ -5,6 +5,7 @@ import "leaflet/dist/leaflet.css";
 import regions from "../data/regions.json";
 import { Card, RiskBadge, SourceLine } from "../components/UI";
 import DataStatusBanner from "../components/DataStatusBanner";
+import OfficialAnalysisNotice from "../components/OfficialAnalysisNotice";
 import { fetchRealtimeSnapshot } from "../services/api";
 import {
   assessRegion,
@@ -67,7 +68,9 @@ export default function MapPage() {
         snapshot.recalls.status === "success" &&
         snapshot.marine.status === "success" &&
         !snapshot.marine.stale
-        ? "latest"
+        ? snapshot.recalls.analysis
+          ? "assisted"
+          : "latest"
         : viewState(snapshot.marine)
       : "error";
   const latestMarine = latestMarineRecord(snapshot?.marine.data);
@@ -221,6 +224,7 @@ export default function MapPage() {
           <DataStatusBanner state={selectedAssessment.state} compact />
         </div>
         <p className="lead-copy">{selectedAssessment.summary}</p>
+        <OfficialAnalysisNotice analysis={snapshot?.recalls.analysis} />
         {usingLatestFallback && (
           <p className="lead-copy">
             아래 값은 선택 지역 수치가 아니라, 공식 API에서 가장 최근에 수집한 관측값입니다.
@@ -274,7 +278,9 @@ export default function MapPage() {
               selectedAssessment.recallCount > 0
                 ? `${selectedAssessment.recallCount}건 확인`
                 : snapshot?.recalls.status === "success"
-                  ? "선택 지역 연결 정보 없음"
+                  ? snapshot.recalls.analysis
+                    ? "공식 원문 보조 분석 완료"
+                    : "선택 지역 연결 정보 없음"
                   : "조회 결과 없음"
             }
           />

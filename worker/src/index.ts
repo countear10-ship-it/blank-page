@@ -1,12 +1,19 @@
 export interface Env {
   DATA_GO_KR_SERVICE_KEY?: string;
   FOOD_SAFETY_KOREA_API_KEY?: string;
+  GEMINI_API_KEY?: string;
+  GEMINI_MODEL?: string;
   ALLOWED_ORIGIN?: string;
   MARINE_WATER_API_URL?: string;
   FOOD_SAFETY_KOREA_API_URL?: string;
 }
 
 export interface ApiSource { name: string; url: string; }
+export interface OfficialSourceAnalysis {
+  summary: string;
+  sourceUrls: string[];
+  analyzedAt: string;
+}
 export interface ApiResponse<T> {
   status: 'success' | 'unavailable' | 'error';
   data: T | null;
@@ -15,6 +22,7 @@ export interface ApiResponse<T> {
   fetchedAt: string;
   stale: boolean;
   message?: string;
+  analysis?: OfficialSourceAnalysis;
 }
 export interface MarineWaterRecord {
   station: string;
@@ -180,13 +188,19 @@ function parseRecallJson(body: unknown): RecallRecord[] | null {
 }
 
 export function parseLatestShellfishBulletin(html: string, baseUrl: string = SOURCES.shellfish.url): ShellfishBulletin | null {
-  const candidates = [...html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
-    .map((match) => ({ href: match[1], title: match[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() }))
-    .filter((item) => /패류독소|채취금지|패류독소속보|속보/.test(item.title));
-  const item = candidates[0];
-  if (!item?.title) return null;
-  const sourceUrl = new URL(item.href, baseUrl).toString();
-  return { title: item.title, sourceUrl, summary: '공식 패류독소 속보가 발표되었습니다. 위치별 채취금지 여부를 원문에서 확인해 주세요.', confirmedRisk: false };
+  const row = (html.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) ?? []).find((item) => /패류독소|채취금지|패류독소속보|패독속보/.test(item));
+  if (!row) return null;
+  const title = row.match(/title=["']([^"']*(?:패류독소|채취금지|패독속보)[^"']*)["']/i)?.[1]?.replace(/\s+/g, ' ').trim();
+  if (!title) return null;
+  const download = row.match(/href=["']([^"']*fileDownloadStat\.do\?FILE_ID=[^"']+)["']/i)?.[1];
+  const publishedAt = row.match(/class=["']date["'][^>]*>\s*([^<]+?)\s*<\/td>/i)?.[1]?.trim();
+  return {
+    title,
+    sourceUrl: download ? new URL(download, baseUrl).toString() : baseUrl,
+    publishedAt,
+    summary: publishedAt ? `가장 최근 공식 패류독소 속보: ${publishedAt} 게시. 원문에서 지역별 채취·섭취 주의 내용을 확인하세요.` : '가장 최근 공식 패류독소 속보 원문을 확인하세요.',
+    confirmedRisk: false,
+  };
 }
 
 async function upstream(url: string, init?: RequestInit): Promise<Response> {
@@ -227,6 +241,92 @@ async function storeRecallSuccess(query: string, body: ApiResponse<RecallRecord[
 
 function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+type GeminiRecallResult = { summary?: unknown; foundRelevantRecall?: unknown };
+
+function geminiText(body: unknown): string | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const candidates = (body as Record<string, unknown>).candidates;
+  if (!Array.isArray(candidates) || !candidates[0] || typeof candidates[0] !== 'object') return undefined;
+  const content = (candidates[0] as Record<string, unknown>).content;
+  if (!content || typeof content !== 'object') return undefined;
+  const parts = (content as Record<string, unknown>).parts;
+  if (!Array.isArray(parts)) return undefined;
+  return parts.map((part) => part && typeof part === 'object' && typeof (part as Record<string, unknown>).text === 'string' ? (part as Record<string, unknown>).text : '').join('').trim() || undefined;
+}
+
+function geminiGroundedOfficialUrls(body: unknown): string[] {
+  if (!body || typeof body !== 'object') return [];
+  const candidates = (body as Record<string, unknown>).candidates;
+  if (!Array.isArray(candidates) || !candidates[0] || typeof candidates[0] !== 'object') return [];
+  const metadata = (candidates[0] as Record<string, unknown>).groundingMetadata;
+  const chunks = metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>).groundingChunks : undefined;
+  if (!Array.isArray(chunks)) return [];
+  return [...new Set(chunks.flatMap((chunk) => {
+    const web = chunk && typeof chunk === 'object' ? (chunk as Record<string, unknown>).web : undefined;
+    const uri = web && typeof web === 'object' ? (web as Record<string, unknown>).uri : undefined;
+    return typeof uri === 'string' && /^https:\/\/([\w-]+\.)*foodsafetykorea\.go\.kr\//i.test(uri) ? [uri] : [];
+  }))];
+}
+
+function parseGeminiJson(text: string | undefined): GeminiRecallResult | null {
+  if (!text) return null;
+  const json = text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    return parsed && typeof parsed === 'object' ? parsed as GeminiRecallResult : null;
+  } catch {
+    return null;
+  }
+}
+
+export function parseGeminiOfficialRecallAnalysis(body: unknown): OfficialSourceAnalysis | null {
+  const sourceUrls = geminiGroundedOfficialUrls(body);
+  const parsed = parseGeminiJson(geminiText(body));
+  const summary = typeof parsed?.summary === 'string' ? parsed.summary.replace(/\s+/g, ' ').trim().slice(0, 340) : '';
+  if (!sourceUrls.length || !summary) return null;
+  return { summary, sourceUrls, analyzedAt: now() };
+}
+
+function foundRelevantRecall(body: unknown): boolean {
+  const parsed = parseGeminiJson(geminiText(body));
+  return parsed?.foundRelevantRecall === true;
+}
+
+async function geminiOfficialRecallFallback(query: string, env: Env): Promise<{ records: RecallRecord[]; analysis: OfficialSourceAnalysis } | null> {
+  if (!env.GEMINI_API_KEY) return null;
+  const prompt = [
+    'Use Google Search to find the most recent official Food Safety Korea (foodsafetykorea.go.kr) original pages relevant to a Korean seafood recall or sales-suspension check.',
+    `Search keyword: ${query || '해산물'}.`,
+    'Return JSON only: {"summary":"Korean summary in 180 Korean characters or fewer, state the source date if visible and clearly say when it is not visible","foundRelevantRecall":true|false}.',
+    'Rules: use only facts that are directly supported by current official Food Safety Korea pages; never say food is safe; do not invent a recall, date, product, or region; foundRelevantRecall is true only when the official source explicitly identifies a relevant recall or sales suspension.',
+  ].join('\n');
+  const models = [...new Set([env.GEMINI_MODEL, 'gemini-3.5-flash', 'gemini-2.5-flash'].filter((model): model is string => Boolean(model)))];
+  for (const model of models) {
+    try {
+      const result = await upstream(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { temperature: 0, responseMimeType: 'application/json', maxOutputTokens: 300 },
+        }),
+      });
+      if (!result.ok) continue;
+      const body = await result.json() as unknown;
+      const analysis = parseGeminiOfficialRecallAnalysis(body);
+      if (!analysis) continue;
+      const records = foundRelevantRecall(body)
+        ? [{ productName: query || '해산물', reason: `공식 원문 보조 분석: ${analysis.summary}`, announcedAt: analysis.analyzedAt, sourceUrl: analysis.sourceUrls[0] }]
+        : [];
+      return { records, analysis };
+    } catch {
+      // A direct official API or the retained cache remains the preferred source.
+    }
+  }
+  return null;
 }
 
 async function marine(request: Request, env: Env): Promise<ApiResponse<MarineWaterRecord[]>> {
@@ -306,6 +406,14 @@ async function recalls(request: Request, env: Env): Promise<ApiResponse<RecallRe
   } catch {
     lastError = '회수 API 요청을 처리하지 못했습니다.';
   }
+  const assisted = await geminiOfficialRecallFallback(query, env);
+  if (assisted) {
+    return {
+      ...response(SOURCES.recalls, 'success', assisted.records, '식품안전나라 API 응답이 지연되어 최신 공식 원문 검색 결과를 보조 분석했습니다. 안전 보장이 아닌 원문 확인 보조 정보입니다.'),
+      observedAt: assisted.analysis.analyzedAt,
+      analysis: assisted.analysis,
+    };
+  }
   const cached = await recallFallback(query, lastError);
   if (cached) return cached;
   return response<RecallRecord[]>(SOURCES.recalls, 'unavailable', null, `${lastError} 잠시 후 다시 확인하세요.`);
@@ -326,7 +434,7 @@ const worker = {
     if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders(request, env) });
     const url = new URL(request.url);
     if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405, headers: corsHeaders(request, env) });
-    if (url.pathname === '/api/health') return json(response(SOURCES.marine, 'success', { marineConfigured: Boolean(env.DATA_GO_KR_SERVICE_KEY && env.MARINE_WATER_API_URL), recallsConfigured: Boolean(env.FOOD_SAFETY_KOREA_API_KEY), shellfishSource: SOURCES.shellfish.url }), request, env);
+    if (url.pathname === '/api/health') return json(response(SOURCES.marine, 'success', { marineConfigured: Boolean(env.DATA_GO_KR_SERVICE_KEY && env.MARINE_WATER_API_URL), recallsConfigured: Boolean(env.FOOD_SAFETY_KOREA_API_KEY), geminiConfigured: Boolean(env.GEMINI_API_KEY), shellfishSource: SOURCES.shellfish.url, revision: 'official-source-assist-v1' }), request, env);
     if (url.pathname === '/api/marine-water') return json(await marine(request, env), request, env);
     if (url.pathname === '/api/recalls') return json(await recalls(request, env), request, env);
     if (url.pathname === '/api/shellfish-bulletin/latest') return json(await shellfish(), request, env);

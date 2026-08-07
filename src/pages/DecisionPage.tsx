@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Check, ClipboardCheck, Copy, RotateCcw, Share2 } from "lucide-react";
 import regions from "../data/regions.json";
-import { Card, RiskBars, RiskBadge, SourceLine } from "../components/UI";
+import { Card, RiskBars, SourceLine } from "../components/UI";
 import DataStatusBanner from "../components/DataStatusBanner";
+import OfficialAnalysisNotice from "../components/OfficialAnalysisNotice";
 import { fetchRealtimeSnapshot } from "../services/api";
 import { evaluateDecision } from "../logic/decisionEngine";
 import type { RealtimeSnapshot } from "../services/types";
@@ -88,7 +89,9 @@ export default function DecisionPage() {
   const status = loading
     ? "loading"
     : snapshot?.marine.status === "success" && !snapshot.marine.stale
-      ? "latest"
+      ? snapshot.recalls.analysis
+        ? "assisted"
+        : "latest"
       : snapshot?.marine.status === "error"
         ? "error"
         : "unavailable";
@@ -121,7 +124,7 @@ export default function DecisionPage() {
         </div>
         <DataStatusBanner
           state={status}
-          message="실시간 데이터가 없으면 결과를 ‘판단할 정보 부족’으로 보류합니다."
+          message={snapshot?.recalls.analysis ? "실시간 API 지연 시 최신 공식 원문을 보조 분석해 함께 반영합니다." : "실시간 데이터가 없으면 결과를 ‘판단할 정보 부족’으로 보류합니다."}
         />
       </div>
       <div className="decision-progress" aria-label="맞춤 판정 진행 단계">
@@ -257,8 +260,8 @@ export default function DecisionPage() {
         <div className="form-preview">
           <span>선택 지역</span>
           <strong>{region.name}</strong>
-          <RiskBadge level="unknown" compact />
-          <span className="preview-muted">공식 응답 후 갱신</span>
+          <DataStatusBanner state={status} compact />
+          <span className="preview-muted">{snapshot?.recalls.analysis ? "최신 공식 원문 보조 분석 반영" : "공식 응답 후 갱신"}</span>
         </div>
         <button
           className="primary-button full"
@@ -274,6 +277,7 @@ export default function DecisionPage() {
           result={result}
           input={input}
           region={region}
+          snapshot={snapshot}
           onReset={() => setResult(null)}
         />
       )}
@@ -305,11 +309,13 @@ function DecisionResultCard({
   result,
   input,
   region,
+  snapshot,
   onReset,
 }: {
   result: DecisionResult;
   input: DecisionInput;
   region: Region;
+  snapshot: RealtimeSnapshot | null;
   onReset: () => void;
 }) {
   const [shared, setShared] = useState(false);
@@ -344,7 +350,7 @@ function DecisionResultCard({
         <span className="result-kicker">현재 확인된 공식 데이터 기준</span>
         <DataStatusBanner
           state={
-            result.level === "정보 부족" ? "unavailable" : "manual-confirm"
+            result.level === "정보 부족" ? "unavailable" : snapshot?.recalls.analysis ? "assisted" : "manual-confirm"
           }
           compact
         />
@@ -356,7 +362,7 @@ function DecisionResultCard({
             : tone === "danger"
               ? "!"
               : tone === "unknown"
-                ? "?"
+                ? "i"
                 : "△"}
         </span>
         <div>
@@ -369,6 +375,7 @@ function DecisionResultCard({
         personal={result.personalRisk}
         storage={result.storageRisk}
       />
+      <OfficialAnalysisNotice analysis={snapshot?.recalls.analysis} />
       <div className="reason-columns">
         <div>
           <h3>판정 이유</h3>

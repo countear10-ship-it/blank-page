@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseLatestShellfishBulletin, parseMarineJson, parseMarineXml, recallProviderError } from './index';
+import { parseGeminiOfficialRecallAnalysis, parseLatestShellfishBulletin, parseMarineJson, parseMarineXml, recallProviderError } from './index';
 
 describe('worker parsers', () => {
   it('해양 XML에서 확인 가능한 관측값만 추출한다', () => {
@@ -15,9 +15,9 @@ describe('worker parsers', () => {
     expect(parseLatestShellfishBulletin('<html><body><a href="/notice">일반 공지</a></body></html>')).toBeNull();
   });
 
-  it('공식 속보 링크를 찾으면 위치 판단은 보류한 채 원문 링크를 보존한다', () => {
-    const bulletin = parseLatestShellfishBulletin('<a href="/board/1">2026 패류독소 속보</a>', 'https://www.nifs.go.kr/board/actionBoard0021List.do');
-    expect(bulletin).toMatchObject({ confirmedRisk: false, sourceUrl: 'https://www.nifs.go.kr/board/1' });
+  it('공식 속보 행에서 PDF 원문 링크와 게시일을 보존한다', () => {
+    const bulletin = parseLatestShellfishBulletin('<tr><td class="subject"><a href="javascript:fnPopupPrevew(\'id\')" title="2026 패류독소 속보">2026 패류독소 속보</a></td><td><a href="/cmmnFile/fileDownloadStat.do?FILE_ID=abc">PDF</a></td><td class="date">2026-05-11</td></tr>', 'https://www.nifs.go.kr/board/actionBoard0021List.do');
+    expect(bulletin).toMatchObject({ confirmedRisk: false, sourceUrl: 'https://www.nifs.go.kr/cmmnFile/fileDownloadStat.do?FILE_ID=abc', publishedAt: '2026-05-11' });
   });
   it('해양자동관측망 응답 필드명을 관측 레코드로 변환한다', () => {
     const records = parseMarineXml('<response><body><items><item><rtmWqWtchStaCd>NEP2002</rtmWqWtchStaCd><rtmWqWtchDtlDt>2020-02-06 15:25:00.0</rtmWqWtchDtlDt><rtmWtchWtem>7.590</rtmWtchWtem><ph>7.980</ph><rtmWqDoxn>11.760</rtmWqDoxn><rtmWqTu>1.2</rtmWqTu></item></items></body></response>');
@@ -29,5 +29,9 @@ describe('worker parsers', () => {
   });
   it('preserves a temporary Food Safety Korea error message', () => {
     expect(recallProviderError({ I0490: { RESULT: { CODE: 'ERROR-503', MSG: 'Retry later.' } } })).toBe('ERROR-503: Retry later.');
+  });
+  it('accepts an AI summary only when it is grounded in a Food Safety Korea original URL', () => {
+    const analysis = parseGeminiOfficialRecallAnalysis({ candidates: [{ content: { parts: [{ text: '{"summary":"공식 원문 요약","foundRelevantRecall":false}' }] }, groundingMetadata: { groundingChunks: [{ web: { uri: 'https://www.foodsafetykorea.go.kr/portal/specialinfo/searchInfoProduct.do' } }] } }] });
+    expect(analysis).toMatchObject({ summary: '공식 원문 요약', sourceUrls: ['https://www.foodsafetykorea.go.kr/portal/specialinfo/searchInfoProduct.do'] });
   });
 });
