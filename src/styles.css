@@ -24,6 +24,7 @@ a { color: inherit; text-decoration: none; }
 .page-intro { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
 .page-intro h1 { max-width: 760px; margin: 5px 0 12px; color: var(--navy); font-size: clamp(2rem, 4.5vw, 3.35rem); line-height: 1.1; letter-spacing: -.07em; }
 .page-intro h1 em, .hero h1 em, .decision-result h2 em { color: var(--coral); font-style: normal; }
+.decision-title-line, .decision-page .page-intro h1 em { display: block; }
 .page-intro > div:first-child > p:last-child { max-width: 620px; margin: 0; color: var(--muted); line-height: 1.75; }
 .decision-page .page-intro > div:first-child > p:last-child { font-size: .96rem; word-break: keep-all; overflow-wrap: normal; letter-spacing: -.018em; }
 .decision-intro-copy { display: grid; gap: 5px; }
@@ -668,12 +669,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     font-size: clamp(1.78rem, 7.3vw, 2.1rem);
     line-height: 1.38;
     letter-spacing: -.045em;
-    white-space: nowrap;
-    word-break: normal;
-    overflow-wrap: normal;
+    white-space: normal;
+    word-break: keep-all;
+    overflow-wrap: break-word;
     overflow: visible;
   }
-  .decision-page .page-intro h1 em { display: inline-block; padding: 0 .12em .08em 0; }
+  .decision-page .page-intro h1 .decision-title-line,
+  .decision-page .page-intro h1 em { display: block; }
+  .decision-page .page-intro h1 em { padding: 0 .12em .08em 0; }
+  .decision-page .page-intro h1 .decision-title-question { display: inline-block; min-width: .24em; padding: 0 .08em .11em .03em; line-height: 1.1; overflow: visible; }
   .seafood-storage-guide { gap: 10px; margin-top: 14px; padding: 14px; }
   .seafood-storage-guide-heading { align-items: flex-start; flex-direction: column; gap: 3px; }
   .seafood-storage-guide-heading span { font-size: .74rem; }

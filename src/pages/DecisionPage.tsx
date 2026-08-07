@@ -148,9 +148,8 @@ export default function DecisionPage() {
         <div>
           <p className="eyebrow">PERSONAL CHECK</p>
           <h1>
-            오늘 이 해산물,
-            <br />
-            <em>먹어도 될까?</em>
+            <span className="decision-title-line">오늘 이 해산물,</span>
+            <em>먹어도 될까<span className="decision-title-question">?</span></em>
           </h1>
           <p className="decision-intro-copy">
             <span>해산물·지역·생식 여부·보관 상태·개인 조건을 조합해 공식 데이터 기준의 행동을 안내합니다.</span>
