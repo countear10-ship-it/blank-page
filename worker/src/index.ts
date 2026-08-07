@@ -42,6 +42,7 @@ export interface ShellfishBulletin { title: string; publishedAt?: string; source
 const SOURCES = {
   marine: { name: '해양수산부 해양자동관측망', url: 'https://www.data.go.kr/data/15127779/openapi.do' },
   recalls: { name: '식품안전나라 회수·판매중지', url: 'https://www.foodsafetykorea.go.kr/portal/specialinfo/searchInfoProduct.do' },
+  mfdsRecalls: { name: '식품의약품안전처 회수·판매중지 보도자료', url: 'https://www.mfds.go.kr/brd/m_99/list.do' },
   shellfish: { name: '국립수산과학원 패류독소 속보', url: 'https://www.nifs.go.kr/board/actionBoard0021List.do?selectPage=5' },
 } as const;
 
@@ -201,6 +202,67 @@ export function parseLatestShellfishBulletin(html: string, baseUrl: string = SOU
     summary: publishedAt ? `가장 최근 공식 패류독소 속보: ${publishedAt} 게시. 원문에서 지역별 채취·섭취 주의 내용을 확인하세요.` : '가장 최근 공식 패류독소 속보 원문을 확인하세요.',
     confirmedRisk: false,
   };
+}
+
+export interface MfdsRecallNotice {
+  title: string;
+  publishedAt?: string;
+  sourceUrl: string;
+}
+
+function decodeHtml(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&(?:#0*39|apos);/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function parseMfdsRecallNotices(html: string, baseUrl: string = SOURCES.mfdsRecalls.url): MfdsRecallNotice[] {
+  const notices: MfdsRecallNotice[] = [];
+  const pattern = /<a\s+href="([^"]*view\.do\?[^"]*)"[^>]*class="title"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<div class="right_column">\s*([^<]+?)\s*<\/div>/gi;
+  for (const match of html.matchAll(pattern)) {
+    const title = decodeHtml(match[2]);
+    if (!title || !/(회수|판매\s*중지)/.test(title)) continue;
+    const date = decodeHtml(match[3]);
+    notices.push({
+      title,
+      sourceUrl: new URL(match[1].replace(/&amp;/g, '&'), baseUrl).toString(),
+      ...( /^\d{4}-\d{2}-\d{2}$/.test(date) ? { publishedAt: date } : {}),
+    });
+  }
+  return notices;
+}
+
+async function mfdsOfficialRecallFallback(query: string): Promise<{ records: RecallRecord[]; analysis: OfficialSourceAnalysis } | null> {
+  try {
+    const page = await upstream(SOURCES.mfdsRecalls.url);
+    if (!page.ok) return null;
+    const notices = parseMfdsRecallNotices(await page.text());
+    if (!notices.length) return null;
+    const keyword = query.trim();
+    const matches = keyword ? notices.filter((notice) => notice.title.includes(keyword)) : notices;
+    const displayed = (matches.length ? matches : notices).slice(0, 2);
+    const latestDate = displayed.map((notice) => notice.publishedAt).filter((date): date is string => Boolean(date)).sort().at(-1);
+    const summary = matches.length
+      ? `식약처 최신 회수·판매중지 공지에서 “${keyword}”가 제목에 명시된 안내 ${matches.length}건을 확인했습니다. 원문에서 제품명·판매처·회수 사유를 확인하세요.`
+      : `식약처 최신 회수·판매중지 공지 ${notices.length}건을 확인했지만, 현재 목록 제목에서 “${keyword || '해산물'}”이 직접 명시된 안내는 찾지 못했습니다. 식품안전나라 API 지연으로 제품·판매처 단위 확인은 보류합니다.`;
+    return {
+      records: matches.map((notice) => ({
+        productName: notice.title,
+        reason: '식품의약품안전처 공식 회수·판매중지 보도자료',
+        announcedAt: notice.publishedAt,
+        sourceUrl: notice.sourceUrl,
+      })),
+      analysis: { summary, sourceUrls: displayed.map((notice) => notice.sourceUrl), analyzedAt: latestDate ?? now() },
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function upstream(url: string, init?: RequestInit): Promise<Response> {
@@ -405,6 +467,21 @@ async function recalls(request: Request, env: Env): Promise<ApiResponse<RecallRe
     }
   } catch {
     lastError = '회수 API 요청을 처리하지 못했습니다.';
+  }
+  const mfdsFallback = await mfdsOfficialRecallFallback(query);
+  if (mfdsFallback) {
+    if (mfdsFallback.records.length) {
+      return {
+        ...response(SOURCES.mfdsRecalls, 'success', mfdsFallback.records, '식품안전나라 API 응답이 지연되어 식품의약품안전처의 최신 공식 회수·판매중지 보도자료를 대신 확인했습니다.'),
+        observedAt: mfdsFallback.analysis.analyzedAt,
+        analysis: mfdsFallback.analysis,
+      };
+    }
+    return {
+      ...response(SOURCES.mfdsRecalls, 'unavailable', [], `${lastError} 식품의약품안전처 최신 회수·판매중지 공지는 확인했지만 선택 식품의 제품·판매처 단위 확인은 보류합니다.`),
+      observedAt: mfdsFallback.analysis.analyzedAt,
+      analysis: mfdsFallback.analysis,
+    };
   }
   const assisted = await geminiOfficialRecallFallback(query, env);
   if (assisted) {

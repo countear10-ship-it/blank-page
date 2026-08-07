@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseGeminiOfficialRecallAnalysis, parseLatestShellfishBulletin, parseMarineJson, parseMarineXml, recallProviderError } from './index';
+import { parseGeminiOfficialRecallAnalysis, parseLatestShellfishBulletin, parseMarineJson, parseMarineXml, parseMfdsRecallNotices, recallProviderError } from './index';
 
 describe('worker parsers', () => {
   it('해양 XML에서 확인 가능한 관측값만 추출한다', () => {
@@ -29,6 +29,10 @@ describe('worker parsers', () => {
   });
   it('preserves a temporary Food Safety Korea error message', () => {
     expect(recallProviderError({ I0490: { RESULT: { CODE: 'ERROR-503', MSG: 'Retry later.' } } })).toBe('ERROR-503: Retry later.');
+  });
+  it('extracts current MFDS recall notices and their original links', () => {
+    const notices = parseMfdsRecallNotices('<li><a href="./view.do?seq=50254&amp;page=1" class="title">[보도참고] 굴 제품 회수 조치</a><div class="right_column">2026-08-06</div></li>');
+    expect(notices).toEqual([{ title: '[보도참고] 굴 제품 회수 조치', publishedAt: '2026-08-06', sourceUrl: 'https://www.mfds.go.kr/brd/m_99/view.do?seq=50254&page=1' }]);
   });
   it('accepts an AI summary only when it is grounded in a Food Safety Korea original URL', () => {
     const analysis = parseGeminiOfficialRecallAnalysis({ candidates: [{ content: { parts: [{ text: '{"summary":"공식 원문 요약","foundRelevantRecall":false}' }] }, groundingMetadata: { groundingChunks: [{ web: { uri: 'https://www.foodsafetykorea.go.kr/portal/specialinfo/searchInfoProduct.do' } }] } }] });

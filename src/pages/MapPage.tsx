@@ -64,13 +64,13 @@ export default function MapPage() {
   const globalState = loading
     ? "loading"
     : snapshot
-      ? snapshot.shellfish.status === "success" &&
+      ? snapshot.recalls.analysis
+        ? "assisted"
+        : snapshot.shellfish.status === "success" &&
         snapshot.recalls.status === "success" &&
         snapshot.marine.status === "success" &&
         !snapshot.marine.stale
-        ? snapshot.recalls.analysis
-          ? "assisted"
-          : "latest"
+        ? "latest"
         : viewState(snapshot.marine)
       : "error";
   const latestMarine = latestMarineRecord(snapshot?.marine.data);

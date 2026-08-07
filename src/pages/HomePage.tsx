@@ -78,7 +78,7 @@ export default function HomePage() {
 }
 
 function LiveStatus({ icon, label, response, loading }: { icon: React.ReactNode; label: string; response?: ApiResponse<unknown>; loading: boolean }) {
-  const state = loading ? 'loading' : response?.status === 'success' ? 'latest' : response?.status === 'error' ? 'error' : response?.status === 'unavailable' ? 'unavailable' : 'no-data';
+  const state = loading ? 'loading' : response?.analysis ? 'assisted' : response?.status === 'success' ? 'latest' : response?.status === 'error' ? 'error' : response?.status === 'unavailable' ? 'unavailable' : 'no-data';
   return <div className="live-status-card"><span className="live-status-icon">{icon}</span><div><strong>{label}</strong><DataStatusBanner state={state} compact /></div></div>;
 }
 
