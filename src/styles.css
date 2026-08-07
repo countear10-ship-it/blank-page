@@ -644,3 +644,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .chip-grid { grid-template-columns: repeat(2, 1fr); }
   .weather-formula-card { padding: 13px; }
 }
+
+/* Keep the storage result heading on one deliberate mobile type scale. */
+@media (max-width: 720px) {
+  .storage-result .card-topline { align-items: flex-start; gap: 10px; }
+  .storage-result h2 { align-items: center; gap: 6px; margin-top: 5px; font-size: .88rem; line-height: 1.45; letter-spacing: -.025em; }
+  .storage-result h2 strong { font-size: 1.08rem; line-height: 1.35; letter-spacing: -.04em; }
+  .storage-result h2 .risk-badge { padding: 4px 6px; font-size: .64rem; line-height: 1.2; }
+  .storage-result .result-score { padding-top: 3px; font-size: .78rem; line-height: 1.35; text-align: right; }
+}
