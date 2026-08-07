@@ -3,7 +3,7 @@ import regions from '../data/regions.json';
 import { calculatePersonalRiskScore, countPersonalRiskConditions, evaluateDecision } from './decisionEngine';
 import type { DecisionInput, Region } from '../types';
 
-const base: DecisionInput = { seafood: '굴', regionId: 'songjeong', raw: false, storageMode: '냉장', storageHours: 6, temperature: 4, conditions: [] };
+const base: DecisionInput = { seafood: '굴', regionId: 'songjeong', raw: false, storageSituation: '차갑게 유지', packageCondition: '이상 없음', conditions: [] };
 const typedRegions = regions as Region[];
 
 describe('evaluateDecision', () => {
@@ -30,5 +30,9 @@ describe('evaluateDecision', () => {
     expect(countPersonalRiskConditions(['면역저하', '간질환'])).toBe(2);
     expect(calculatePersonalRiskScore(['면역저하', '간질환'])).toBe(70);
     expect(calculatePersonalRiskScore(['알레르기', '면역저하'])).toBe(100);
+  });
+  it('소비자가 확인한 포장 이상과 실온 방치를 최우선 보관 경고로 반영한다', () => {
+    expect(evaluateDecision({ ...base, packageCondition: '이상 있음' }, typedRegions).level).toBe('섭취 피하기');
+    expect(evaluateDecision({ ...base, storageSituation: '실온 방치' }, typedRegions).level).toBe('섭취 피하기');
   });
 });

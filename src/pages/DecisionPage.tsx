@@ -10,10 +10,11 @@ import type { RealtimeSnapshot } from "../services/types";
 import type {
   DecisionInput,
   DecisionResult,
+  ConsumerStorageSituation,
+  PackageCondition,
   PersonalCondition,
   Region,
   Seafood,
-  StorageMode,
 } from "../types";
 
 const typedRegions = regions as Region[];
@@ -33,6 +34,17 @@ const conditions: PersonalCondition[] = [
   "간질환",
   "주의조건 없음",
 ];
+const storageSituations: Array<{ value: ConsumerStorageSituation; title: string; description: string }> = [
+  { value: "차갑게 유지", title: "구입 후 바로 냉장·냉동", description: "집에 와서 바로 차갑게 보관했어요" },
+  { value: "보냉 이동", title: "아이스팩·보냉 가방으로 이동", description: "이동 중에도 차가운 상태였어요" },
+  { value: "실온 방치", title: "실온에 2시간 이상 있었어요", description: "차갑게 유지하지 못했어요" },
+  { value: "확인 어려움", title: "어떻게 보관됐는지 모르겠어요", description: "보관 경로를 확인하기 어려워요" },
+];
+const packageConditions: Array<{ value: PackageCondition; title: string; description: string }> = [
+  { value: "이상 없음", title: "포장·냄새 이상 없음", description: "누수·팽창·이상 냄새가 없어요" },
+  { value: "이상 있음", title: "포장 또는 냄새가 이상해요", description: "팽창·누수·이상 냄새가 있어요" },
+  { value: "확인 어려움", title: "확인하기 어려워요", description: "상태를 잘 모르겠어요" },
+];
 const progressLabels = ["해산물", "지역", "섭취 방식", "주의조건", "판정 결과"];
 
 export default function DecisionPage() {
@@ -40,9 +52,8 @@ export default function DecisionPage() {
     seafood: "굴",
     regionId: "gijang",
     raw: true,
-    storageMode: "냉장",
-    storageHours: 6,
-    temperature: 4,
+    storageSituation: "차갑게 유지",
+    packageCondition: "이상 없음",
     conditions: [],
   });
   const [snapshot, setSnapshot] = useState<RealtimeSnapshot | null>(null);
@@ -197,48 +208,36 @@ export default function DecisionPage() {
             </button>
           </div>
         </Field>
-        <Field label="보관 상태" hint="판정에도 함께 반영">
-          <div className="storage-mini-grid">
-            <label>
-              방식
-              <select
-                value={input.storageMode}
-                onChange={(event) =>
-                  update("storageMode", event.target.value as StorageMode)
-                }
+        <Field label="구입 후 보관 상황" hint="숫자를 몰라도 선택할 수 있어요">
+          <div className="consumer-choice-grid">
+            {storageSituations.map((situation) => (
+              <button
+                type="button"
+                key={situation.value}
+                className={'consumer-choice ' + (input.storageSituation === situation.value ? 'active' : '')}
+                onClick={() => update('storageSituation', situation.value)}
+                aria-pressed={input.storageSituation === situation.value}
               >
-                <option>실온</option>
-                <option>냉장</option>
-                <option>냉동</option>
-              </select>
-            </label>
-            <label>
-              시간
-              <select
-                value={input.storageHours}
-                onChange={(event) =>
-                  update("storageHours", Number(event.target.value))
-                }
+                <strong>{situation.title}</strong>
+                <small>{situation.description}</small>
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label="포장·냄새 확인" hint="직접 확인한 상태를 선택하세요">
+          <div className="consumer-choice-grid package-choice-grid">
+            {packageConditions.map((condition) => (
+              <button
+                type="button"
+                key={condition.value}
+                className={'consumer-choice ' + (input.packageCondition === condition.value ? 'active' : '')}
+                onClick={() => update('packageCondition', condition.value)}
+                aria-pressed={input.packageCondition === condition.value}
               >
-                {[1, 3, 6, 12, 24, 48].map((hours) => (
-                  <option key={hours} value={hours}>
-                    {hours}시간
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              온도
-              <input
-                type="number"
-                value={input.temperature}
-                onChange={(event) =>
-                  update("temperature", Number(event.target.value))
-                }
-                aria-label="보관 온도"
-              />
-              <small>℃</small>
-            </label>
+                <strong>{condition.title}</strong>
+                <small>{condition.description}</small>
+              </button>
+            ))}
           </div>
         </Field>
         <Field label="개인 주의조건" hint="복수 선택 가능">
@@ -260,6 +259,10 @@ export default function DecisionPage() {
         <div className="form-preview">
           <span>선택 지역</span>
           <strong>{region.name}</strong>
+          <span>보관</span>
+          <strong>{input.storageSituation}</strong>
+          <span>제품 상태</span>
+          <strong>{input.packageCondition}</strong>
           <DataStatusBanner state={status} compact />
           <span className="preview-muted">{snapshot?.recalls.analysis ? "최신 공식 원문 보조 분석 반영" : "공식 응답 후 갱신"}</span>
         </div>

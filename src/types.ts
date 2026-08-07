@@ -3,6 +3,8 @@ export type DecisionLevel = '가능' | '가열 권장' | '섭취 주의' | '섭�
 export type Seafood = '굴' | '홍합' | '새우' | '고등어' | '광어' | '오징어';
 export type StorageMode = '실온' | '냉장' | '냉동';
 export type PersonalCondition = '알레르기' | '임신' | '고령자' | '면역저하' | '간질환' | '주의조건 없음';
+export type ConsumerStorageSituation = '차갑게 유지' | '보냉 이동' | '실온 방치' | '확인 어려움';
+export type PackageCondition = '이상 없음' | '이상 있음' | '확인 어려움';
 
 export interface RiskHistoryPoint { date: string; level: RiskLevel; value: number; label: string; }
 
@@ -30,9 +32,8 @@ export interface DecisionInput {
   seafood: Seafood;
   regionId: string;
   raw: boolean;
-  storageMode: StorageMode;
-  storageHours: number;
-  temperature: number;
+  storageSituation: ConsumerStorageSituation;
+  packageCondition: PackageCondition;
   conditions: PersonalCondition[];
 }
 

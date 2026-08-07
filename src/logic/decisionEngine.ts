@@ -1,9 +1,15 @@
-import type { DecisionInput, DecisionResult, PersonalCondition, Region, RiskLevel } from '../types';
+import type { ConsumerStorageSituation, DecisionInput, DecisionResult, PersonalCondition, Region, RiskLevel } from '../types';
 import { calculateStorageRisk } from './storageRules';
 import type { RealtimeSnapshot } from '../services/types';
 import { snapshotHasOfficialDanger, snapshotIsSufficient } from '../services/riskEngine';
 
 const HIGH_RISK_CONDITIONS: PersonalCondition[] = ['임신', '고령자', '면역저하', '간질환'];
+const CONSUMER_STORAGE_PRESETS: Record<ConsumerStorageSituation, { mode: '실온' | '냉장'; temperature: number; hours: number }> = {
+  '차갑게 유지': { mode: '냉장', temperature: 4, hours: 3 },
+  '보냉 이동': { mode: '냉장', temperature: 7, hours: 3 },
+  '실온 방치': { mode: '실온', temperature: 24, hours: 3 },
+  '확인 어려움': { mode: '냉장', temperature: 8, hours: 12 },
+};
 
 function personalRisk(conditions: PersonalCondition[]): RiskLevel {
   if (conditions.includes('알레르기')) return 'danger';
@@ -22,20 +28,50 @@ export function countPersonalRiskConditions(conditions: PersonalCondition[]): nu
   return conditions.filter((condition) => HIGH_RISK_CONDITIONS.includes(condition)).length;
 }
 
+function storageInputFromConsumerChoice(input: DecisionInput) {
+  const preset = CONSUMER_STORAGE_PRESETS[input.storageSituation];
+  return {
+    seafood: input.seafood === '홍합' || input.seafood === '광어' || input.seafood === '오징어' ? '새우' : input.seafood,
+    mode: preset.mode,
+    temperature: preset.temperature,
+    hours: preset.hours,
+    raw: input.raw,
+  } as const;
+}
+
 export function evaluateDecision(input: DecisionInput, regions: Region[], referenceDate = '2026-08-06', realtime?: RealtimeSnapshot): DecisionResult {
   const region = regions.find((item) => item.id === input.regionId);
-  const storage = calculateStorageRisk({ seafood: input.seafood === '광어' || input.seafood === '오징어' ? '새우' : input.seafood as '고등어' | '새우' | '굴', mode: input.storageMode, temperature: input.temperature, hours: input.storageHours, raw: input.raw });
+  const baseStorage = calculateStorageRisk(storageInputFromConsumerChoice(input));
+  const storage = input.storageSituation === '확인 어려움' || input.packageCondition === '확인 어려움'
+    ? { ...baseStorage, level: 'unknown' as RiskLevel, factors: baseStorage.factors.concat('보관 경로 또는 제품 상태를 확인하기 어려워 보수적으로 안내합니다.') }
+    : baseStorage;
   const personal = personalRisk(input.conditions);
   const regionRisk = region?.riskLevel ?? 'unknown';
   const reasons: string[] = [];
   const actions: string[] = [];
 
+  if (input.conditions.includes('알레르기')) {
+    reasons.push('선택한 해산물 알레르기 조건이 있어 최우선 경고로 처리했습니다.');
+    actions.push('해당 해산물은 섭취하지 말고, 증상이 있으면 의료기관 안내를 받으세요.');
+    return result('섭취 피하기', '섭취 피하기', reasons, actions, regionRisk, personal, storage.level, region, referenceDate);
+  }
+  if (input.packageCondition === '이상 있음') {
+    reasons.push('포장 팽창·누수 또는 이상 냄새가 있다고 선택해 최우선 보관 경고로 처리했습니다.');
+    actions.push('섭취하지 말고 판매처 또는 제조사 안내를 확인하세요.');
+    return result('섭취 피하기', '섭취 피하기', reasons, actions, regionRisk, personal, 'danger', region, referenceDate);
+  }
+  if (input.storageSituation === '실온 방치') {
+    reasons.push('실온에 오래 있었다고 선택해 보관 위험을 높게 반영했습니다.');
+    actions.push('섭취를 미루고 제품 표시사항과 상태를 확인하세요. 생식은 피하세요.');
+    return result('섭취 피하기', '섭취 피하기', reasons.concat(storage.factors), actions, regionRisk, personal, storage.level, region, referenceDate);
+  }
+  if (input.storageSituation === '확인 어려움' || input.packageCondition === '확인 어려움') {
+    reasons.push('소비자가 확인할 수 있는 보관 경로 또는 제품 상태 정보가 부족합니다.');
+    actions.push('생식은 피하고, 판매처·포장 표시·이상 냄새를 다시 확인하세요.');
+    return result('섭취 주의', '보관 정보 추가 확인 필요', reasons, actions, regionRisk, personal, storage.level, region, referenceDate);
+  }
+
   if (realtime) {
-    if (input.conditions.includes('알레르기')) {
-      reasons.push('선택한 해산물에 대한 알레르기 조건이 있어 최우선 경고로 처리했습니다.');
-      actions.push('해당 해산물은 섭취하지 말고, 증상이 있으면 의료기관 안내를 받으세요.');
-      return result('섭취 피하기', '섭취 피하기', reasons, actions, regionRisk, personal, storage.level, region, referenceDate);
-    }
     if (region && snapshotHasOfficialDanger(realtime, region, input.seafood)) {
       reasons.push('공식 회수·판매중지 또는 선택 지역과 연결된 위험정보가 확인되었습니다.');
       actions.push('공식 원문과 판매처 안내를 확인할 때까지 섭취하지 마세요.');
@@ -66,11 +102,6 @@ export function evaluateDecision(input: DecisionInput, regions: Region[], refere
     return result('가능', '현재 확인된 공식 데이터에서 즉시 확인되는 위험정보 없음', reasons, actions, 'safe', personal, storage.level, region, referenceDate);
   }
 
-  if (input.conditions.includes('알레르기')) {
-    reasons.push('선택한 해산물 알레르기 조건이 있어 최우선 경고로 처리했습니다.');
-    actions.push('해당 해산물은 섭취하지 말고, 증상이 있으면 의료기관 안내를 받으세요.');
-    return result('섭취 피하기', '섭취 피하기', reasons, actions, regionRisk, personal, storage.level, region, referenceDate);
-  }
   if (regionRisk === 'danger') {
     reasons.push('선택 지역에 시연용 고위험 플래그가 있습니다. 최신 공식 원문 확인이 필요합니다.');
     actions.push('공식 채취금지·회수 정보가 해소될 때까지 섭취를 미루세요.');
