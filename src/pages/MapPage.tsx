@@ -6,7 +6,7 @@ import regions from "../data/regions.json";
 import { Card, RiskBadge, SourceLine } from "../components/UI";
 import DataStatusBanner from "../components/DataStatusBanner";
 import OfficialAnalysisNotice from "../components/OfficialAnalysisNotice";
-import { fetchRealtimeSnapshot } from "../services/api";
+import { fetchRealtimeSnapshot, fetchRegionWeather } from "../services/api";
 import {
   assessRegion,
   latestMarineRecord,
@@ -14,7 +14,8 @@ import {
   type RegionRiskAssessment,
 } from "../services/riskEngine";
 import type { Region, RiskLevel } from "../types";
-import type { RealtimeSnapshot } from "../services/types";
+import { assessWeatherEnvironment } from "../logic/weatherEnvironment";
+import type { ApiResponse, RealtimeSnapshot, WeatherObservation } from "../services/types";
 
 const typedRegions = regions as Region[];
 const mapCenter: [number, number] = [35.14, 129.08];
@@ -28,6 +29,7 @@ const markerColors: Record<RiskLevel, string> = {
 export default function MapPage() {
   const [selectedId, setSelectedId] = useState("gijang");
   const [snapshot, setSnapshot] = useState<RealtimeSnapshot | null>(null);
+  const [weather, setWeather] = useState<ApiResponse<WeatherObservation> | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
@@ -61,6 +63,15 @@ export default function MapPage() {
   );
   const selectedAssessment =
     assessments.get(selected.id) ?? loadingAssessment();
+  useEffect(() => {
+    let active = true;
+    setWeather(null);
+    fetchRegionWeather(selected.latitude, selected.longitude).then((response) => {
+      if (active) setWeather(response);
+    });
+    return () => { active = false; };
+  }, [selected.latitude, selected.longitude]);
+  const weatherEnvironment = assessWeatherEnvironment(weather?.data);
   const globalState = loading
     ? "loading"
     : snapshot
@@ -224,6 +235,15 @@ export default function MapPage() {
           <DataStatusBanner state={selectedAssessment.state} compact />
         </div>
         <p className="lead-copy">{selectedAssessment.summary}</p>
+        <section className={`weather-environment-card weather-${weatherEnvironment.level}`} aria-label="구매 이동 환경 안내">
+          <div>
+            <span>구매·이동 환경</span>
+            <strong>{weatherEnvironment.headline}</strong>
+          </div>
+          <p>{weather?.data ? `기온 ${weather.data.temperature}℃ · 습도 ${weather.data.relativeHumidity}% · ${weatherEnvironment.formula}` : weatherEnvironment.formula}</p>
+          <small>{weatherEnvironment.guidance}</small>
+          <small>기온·습도는 해역 오염 또는 섭취 안전을 뜻하지 않으며, 구매 뒤 보냉·이동 관리 안내입니다.</small>
+        </section>
         <OfficialAnalysisNotice analysis={snapshot?.recalls.analysis} />
         {usingLatestFallback && (
           <p className="lead-copy">

@@ -24,13 +24,18 @@ export function SectionTitle({ eyebrow, title, children }: { eyebrow?: string; t
   return <div className="section-title"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h2>{title}</h2></div>{children}</div>;
 }
 
-export function RiskBars({ region, personal, storage, personalConditionCount = 0, regionApplicable = true }: { region: RiskLevel; personal: RiskLevel; storage: RiskLevel; personalConditionCount?: number; regionApplicable?: boolean }) {
-  const items = [['지역 위험', region], ['개인 위험', personal], ['보관 위험', storage]] as const;
+export function RiskBars({ region, environment, environmentNote, personal, storage, personalConditionCount = 0, regionApplicable = true }: { region: RiskLevel; environment?: RiskLevel; environmentNote?: string; personal: RiskLevel; storage: RiskLevel; personalConditionCount?: number; regionApplicable?: boolean }) {
+  const items: Array<{ label: string; level: RiskLevel; kind: 'official' | 'environment' | 'personal' | 'storage' }> = [
+    { label: '공식 지역 정보', level: region, kind: 'official' },
+    ...(environment ? [{ label: '구매·이동 환경', level: environment, kind: 'environment' as const }] : []),
+    { label: '개인 위험', level: personal, kind: 'personal' },
+    { label: '보관 위험', level: storage, kind: 'storage' },
+  ];
   const widthFor = (level: RiskLevel) => level === 'safe' ? 30 : level === 'caution' ? 65 : level === 'danger' ? 100 : 50;
   const personalNote = personal === 'danger' ? '알레르기 최우선' : personalConditionCount ? `고위험 조건 ${personalConditionCount}개` : undefined;
-  return <div className="risk-bars">{items.map(([label, level]) => {
-    const disabled = label === '지역 위험' && !regionApplicable;
-    return <div className={`risk-bar-row ${disabled ? 'risk-bar-disabled' : ''}`} key={label}><div><span>{disabled ? '지역 위험 (미적용)' : label}</span><span className="risk-bar-meta">{disabled ? <small>지역 또는 원산지 미확인</small> : <><RiskBadge level={level} compact />{label === '개인 위험' && personalNote && <small>{personalNote}</small>}</>}</span></div><div className="bar-track">{disabled ? <span className="bar-fill fill-disabled" style={{ width: '0%' }} /> : <span className={`bar-fill fill-${level}`} style={{ width: `${widthFor(level)}%` }} />}</div></div>;
+  return <div className="risk-bars">{items.map(({ label, level, kind }) => {
+    const disabled = kind === 'official' && !regionApplicable;
+    return <div className={`risk-bar-row ${disabled ? 'risk-bar-disabled' : ''}`} key={label}><div><span>{disabled ? '공식 지역 정보 (미적용)' : label}</span><span className="risk-bar-meta">{disabled ? <small>지역 또는 원산지 미확인</small> : <><RiskBadge level={level} compact />{kind === 'personal' && personalNote && <small>{personalNote}</small>}{kind === 'environment' && environmentNote && <small>{environmentNote}</small>}</>}</span></div><div className="bar-track">{disabled ? <span className="bar-fill fill-disabled" style={{ width: '0%' }} /> : <span className={`bar-fill fill-${level}`} style={{ width: `${widthFor(level)}%` }} />}</div></div>;
   })}</div>;
 }
 

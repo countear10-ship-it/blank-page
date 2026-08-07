@@ -34,6 +34,12 @@ export interface MarineWaterRecord {
   currentSpeed?: number;
 }
 
+export interface WeatherObservation {
+  temperature: number;
+  relativeHumidity: number;
+  observedAt: string;
+}
+
 export interface RecallRecord {
   productName: string;
   companyName?: string;

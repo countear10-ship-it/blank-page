@@ -4,9 +4,10 @@ import regions from "../data/regions.json";
 import { Card, RiskBars, SourceLine } from "../components/UI";
 import DataStatusBanner from "../components/DataStatusBanner";
 import OfficialAnalysisNotice from "../components/OfficialAnalysisNotice";
-import { fetchRealtimeSnapshot } from "../services/api";
+import { fetchRealtimeSnapshot, fetchRegionWeather } from "../services/api";
 import { countPersonalRiskConditions, evaluateDecision } from "../logic/decisionEngine";
-import type { RealtimeSnapshot } from "../services/types";
+import { assessWeatherEnvironment } from "../logic/weatherEnvironment";
+import type { ApiResponse, RealtimeSnapshot, WeatherObservation } from "../services/types";
 import type {
   DecisionInput,
   DecisionResult,
@@ -65,6 +66,7 @@ export default function DecisionPage() {
     conditions: [],
   });
   const [snapshot, setSnapshot] = useState<RealtimeSnapshot | null>(null);
+  const [weather, setWeather] = useState<ApiResponse<WeatherObservation> | null>(null);
   const [loading, setLoading] = useState(true);
   const [result, setResult] = useState<DecisionResult | null>(null);
   const update = <K extends keyof DecisionInput>(
@@ -106,6 +108,19 @@ export default function DecisionPage() {
       active = false;
     };
   }, [input.seafood]);
+  useEffect(() => {
+    const region = typedRegions.find((item) => item.id === input.regionId);
+    if (!region) {
+      setWeather(null);
+      return;
+    }
+    let active = true;
+    setWeather(null);
+    fetchRegionWeather(region.latitude, region.longitude).then((response) => {
+      if (active) setWeather(response);
+    });
+    return () => { active = false; };
+  }, [input.regionId]);
   const status = loading
     ? "loading"
     : snapshot?.marine.status === "success" && !snapshot.marine.stale
@@ -297,6 +312,7 @@ export default function DecisionPage() {
           input={input}
           regionName={regionName}
           snapshot={snapshot}
+          weather={weather}
           onReset={() => setResult(null)}
         />
       )}
@@ -329,14 +345,17 @@ function DecisionResultCard({
   input,
   regionName,
   snapshot,
+  weather,
   onReset,
 }: {
   result: DecisionResult;
   input: DecisionInput;
   regionName: string;
   snapshot: RealtimeSnapshot | null;
+  weather: ApiResponse<WeatherObservation> | null;
   onReset: () => void;
 }) {
+  const weatherEnvironment = assessWeatherEnvironment(weather?.data);
   const [shared, setShared] = useState(false);
   const canShare =
     typeof navigator !== "undefined" &&
@@ -391,6 +410,8 @@ function DecisionResultCard({
       </div>
       <RiskBars
         region={result.regionRisk}
+        environment={input.regionId === "unknown" || input.regionId === "imported" ? undefined : weatherEnvironment.level}
+        environmentNote={weather?.data ? `${weather.data.temperature}℃ · 습도 ${weather.data.relativeHumidity}%` : "날씨 확인 전"}
         personal={result.personalRisk}
         storage={result.storageRisk}
         personalConditionCount={countPersonalRiskConditions(input.conditions)}
@@ -402,6 +423,16 @@ function DecisionResultCard({
         <small>조건별 점수를 합산하지 않습니다. 알레르기·공식 회수·실온 2시간 이상은 다른 조건보다 먼저 적용합니다.</small>
         <div>{evidenceSources.map((source) => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.name}</a>)}</div>
       </div>
+      {input.regionId !== "unknown" && input.regionId !== "imported" && (
+        <div className="weather-formula-card">
+          <strong>구매·이동 환경 공식</strong>
+          <p>{weatherEnvironment.headline} · {weatherEnvironment.formula}</p>
+          <small>기온 단계: 25℃ 이상 1, 30℃ 이상 2 · 습도 단계: 70% 이상 1, 80% 이상 2. 합계 1~2는 보냉 확인, 3 이상은 강한 보냉 주의입니다.</small>
+          <p>{weatherEnvironment.guidance}</p>
+          <a href="https://open-meteo.com/en/docs" target="_blank" rel="noreferrer">현재 날씨 출처: Open-Meteo</a>
+          <small>날씨·습도는 해역 오염이나 섭취 안전을 판정하지 않으며, 구매 뒤 보냉·이동 관리 안내에만 사용합니다.</small>
+        </div>
+      )}
       {input.regionId !== "unknown" && input.regionId !== "imported" && result.regionRisk === "unknown" && snapshot && (
         <div className="official-fallback-card">
           <strong>해양 관측값이 없을 때 함께 확인한 공식 근거</strong>
