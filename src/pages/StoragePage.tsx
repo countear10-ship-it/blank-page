@@ -2,6 +2,7 @@ import { AlertTriangle, ShieldAlert, Thermometer } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Card, RiskBadge, RiskHistoryChart, SourceLine } from '../components/UI';
+import { SEAFOOD_STORAGE_GUIDES } from '../data/storageGuides';
 import { calculateStorageRisk, STORAGE_MICROBE_SOURCE, storageRiskSignals } from '../logic/storageRules';
 import type { StorageInput } from '../types';
 
@@ -64,6 +65,7 @@ export default function StoragePage() {
               ))}
             </div>
           </Field>
+          <SeafoodStorageGuide seafood={input.seafood} />
           <Field label="보관 방식">
             <div className="segmented">
               <button className={input.mode === '실온' ? 'active' : ''} onClick={() => update('mode', '실온')}>실온</button>
@@ -134,4 +136,23 @@ export default function StoragePage() {
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return <div className="form-field"><div className="field-label"><label>{label}</label>{hint && <span>{hint}</span>}</div>{children}</div>;
+}
+
+function SeafoodStorageGuide({ seafood }: { seafood: StorageInput['seafood'] }) {
+  const guide = SEAFOOD_STORAGE_GUIDES[seafood];
+  return (
+    <section className="seafood-storage-guide" aria-live="polite">
+      <div className="seafood-storage-guide-heading">
+        <span>선택한 해산물 추천</span>
+        <strong>{guide.title}</strong>
+      </div>
+      <ul>
+        <li><b>구매 직후</b>{guide.purchase}</li>
+        <li><b>냉장</b>{guide.refrigerator}</li>
+        <li><b>냉동·해동</b>{guide.freezer}</li>
+      </ul>
+      <p>{guide.extra}</p>
+      <a href={guide.sourceUrl} target="_blank" rel="noreferrer">{guide.sourceName} 확인</a>
+    </section>
+  );
 }
