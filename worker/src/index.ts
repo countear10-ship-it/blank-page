@@ -43,6 +43,13 @@ function serviceKey(value: string): string {
   try { return decodeURIComponent(value); } catch { return value; }
 }
 
+function isStale(observedAt?: string, maxAgeDays = 7): boolean {
+  if (!observedAt) return true;
+  const parsed = new Date(observedAt.replace(' ', 'T'));
+  if (Number.isNaN(parsed.getTime())) return true;
+  return Date.now() - parsed.getTime() > maxAgeDays * 24 * 60 * 60 * 1000;
+}
+
 function corsHeaders(request: Request, env: Env): HeadersInit {
   const origin = request.headers.get('Origin') ?? '';
   const allowed = env.ALLOWED_ORIGIN ?? 'http://localhost:5173';
@@ -169,7 +176,7 @@ async function marine(request: Request, env: Env): Promise<ApiResponse<MarineWat
       records = parseMarineXml(body);
     }
     if (!records.length) return response<MarineWaterRecord[]>(SOURCES.marine, 'unavailable', null, '해양 API 응답에서 확인 가능한 관측값이 없습니다.');
-    return { ...response(SOURCES.marine, 'success', records), observedAt: records[0].observedAt };
+    return { ...response(SOURCES.marine, 'success', records), observedAt: records[0].observedAt, stale: isStale(records[0].observedAt), message: isStale(records[0].observedAt) ? '공식 응답은 확인됐지만 관측 시각이 오래되어 최신 정보로 판단하지 않습니다.' : undefined };
   } catch { return response<MarineWaterRecord[]>(SOURCES.marine, 'error', null, '해양 API 요청을 처리하지 못했습니다.'); }
 }
 

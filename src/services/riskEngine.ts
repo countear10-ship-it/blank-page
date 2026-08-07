@@ -45,7 +45,7 @@ export function assessRegion(region: Region, snapshot: RealtimeSnapshot): Region
     reasons.push('공식 패류독소 속보에서 선택 지역과 연결된 주의정보가 확인되었습니다.');
     return { level: 'danger', state: 'manual-confirm', summary: '패류독소 원문에서 채취금지 여부를 확인하세요.', reasons, marine, recallCount, shellfish: snapshot.shellfish };
   }
-  if (snapshot.shellfish.status === 'success' && snapshot.recalls.status === 'success' && snapshot.marine.status === 'success') {
+  if (snapshot.shellfish.status === 'success' && snapshot.recalls.status === 'success' && snapshot.marine.status === 'success' && !snapshot.marine.stale) {
     reasons.push('공식 데이터 응답은 도착했지만 해양환경 자료만으로 해산물의 안전을 보장할 수 없습니다.');
     return { level: 'safe', state: 'latest', summary: '현재 확인된 공식 데이터에서 즉시 확인되는 지역 위험정보 없음', reasons, marine, recallCount, shellfish: snapshot.shellfish };
   }
