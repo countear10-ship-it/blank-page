@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseGeminiOfficialRecallAnalysis, parseLatestShellfishBulletin, parseMarineJson, parseMarineXml, parseMfdsRecallNotices, recallProviderError } from './index';
+import { parseBusanMarineJson, parseGeminiOfficialRecallAnalysis, parseLatestShellfishBulletin, parseMarineJson, parseMarineXml, parseMfdsRecallNotices, recallProviderError } from './index';
 
 describe('worker parsers', () => {
   it('해양 XML에서 확인 가능한 관측값만 추출한다', () => {
@@ -26,6 +26,10 @@ describe('worker parsers', () => {
   it('해양자동관측망 JSON 응답을 관측 레코드로 변환한다', () => {
     const records = parseMarineJson({ body: { items: { item: [{ rtmWqWtchStaCd: 'NEP2002', rtmWqWtchDtlDt: '2020-02-06 15:25:00.0', rtmWtchWtem: '7.590', ph: '7.980', rtmWqDoxn: '11.760' }] } } });
     expect(records[0]).toMatchObject({ station: 'NEP2002', stationId: 'NEP2002', observedAt: '2020-02-06 15:25:00.0', waterTemperature: 7.59, ph: 7.98, dissolvedOxygen: 11.76 });
+  });
+  it('부산 해양환경 측정망 응답에서 지역별 공식 측정값을 추출한다', () => {
+    const records = parseBusanMarineJson({ response: { body: { items: { item: [{ site: '광안리해수욕장', inspecYy: '2025', inspecQt: '4', water01: '32', water02: 'II', water08: '8.2', water13: '8.6', water14: '18.5', water16: '33.2' }] } } } });
+    expect(records[0]).toMatchObject({ station: '광안리해수욕장', inspectedYear: '2025', inspectedQuarter: '4', waterQualityIndex: 32, grade: 'II', ph: 8.2, dissolvedOxygen: 8.6, waterTemperature: 18.5, salinity: 33.2 });
   });
   it('preserves a temporary Food Safety Korea error message', () => {
     expect(recallProviderError({ I0490: { RESULT: { CODE: 'ERROR-503', MSG: 'Retry later.' } } })).toBe('ERROR-503: Retry later.');

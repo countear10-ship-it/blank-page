@@ -5,6 +5,7 @@ export interface Env {
   GEMINI_MODEL?: string;
   ALLOWED_ORIGIN?: string;
   MARINE_WATER_API_URL?: string;
+  BUSAN_MARINE_API_URL?: string;
   FOOD_SAFETY_KOREA_API_URL?: string;
 }
 
@@ -36,11 +37,24 @@ export interface MarineWaterRecord {
   turbidity?: number;
   currentSpeed?: number;
 }
+export interface BusanMarineRecord {
+  station: string;
+  inspectedYear?: string;
+  inspectedQuarter?: string;
+  waterQualityIndex?: number;
+  grade?: string;
+  waterTemperature?: number;
+  ph?: number;
+  dissolvedOxygen?: number;
+  salinity?: number;
+  totalColiform?: number;
+}
 export interface RecallRecord { productName: string; companyName?: string; reason?: string; announcedAt?: string; region?: string; sourceUrl: string; }
 export interface ShellfishBulletin { title: string; publishedAt?: string; sourceUrl: string; summary: string; affectedAreas?: string[]; confirmedRisk: boolean; }
 
 const SOURCES = {
   marine: { name: '해양수산부 해양자동관측망', url: 'https://www.data.go.kr/data/15127779/openapi.do' },
+  busanMarine: { name: '부산광역시 해양환경 측정(망)', url: 'https://www.data.go.kr/data/15034081/openapi.do' },
   recalls: { name: '식품안전나라 회수·판매중지', url: 'https://www.foodsafetykorea.go.kr/portal/specialinfo/searchInfoProduct.do' },
   mfdsRecalls: { name: '식품의약품안전처 회수·판매중지 보도자료', url: 'https://www.mfds.go.kr/brd/m_99/list.do' },
   shellfish: { name: '국립수산과학원 패류독소 속보', url: 'https://www.nifs.go.kr/board/actionBoard0021List.do?selectPage=5' },
@@ -151,6 +165,32 @@ export function parseMarineJson(body: unknown): MarineWaterRecord[] {
     turbidity: jsonNumber(item, ['turbidity', 'ntu', 'rtmWqTu']),
     currentSpeed: jsonNumber(item, ['currentSpeed', 'currentVel']),
   })).filter((item) => item.observedAt || item.waterTemperature !== undefined || item.ph !== undefined);
+}
+
+export function parseBusanMarineJson(body: unknown): BusanMarineRecord[] {
+  if (!body || typeof body !== 'object') return [];
+  const root = body as Record<string, unknown>;
+  const responseBody = root.response && typeof root.response === 'object'
+    ? (root.response as Record<string, unknown>).body
+    : root.body;
+  const bodyObject = responseBody && typeof responseBody === 'object' ? responseBody as Record<string, unknown> : root;
+  const items = bodyObject.items && typeof bodyObject.items === 'object' ? bodyObject.items as Record<string, unknown> : bodyObject;
+  const rawItems = Array.isArray(items.item) ? items.item : items.item ? [items.item] : [];
+  return rawItems
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+    .map((item) => ({
+      station: jsonText(item, ['site', 'siteNm', 'stationName']) ?? '측정지점 미상',
+      inspectedYear: jsonText(item, ['inspecYy', 'inspectionYear']),
+      inspectedQuarter: jsonText(item, ['inspecQt', 'inspectionQuarter']),
+      waterQualityIndex: jsonNumber(item, ['water01', 'waterQualityIndex', 'wqi']),
+      grade: jsonText(item, ['water02', 'grade']),
+      waterTemperature: jsonNumber(item, ['water14', 'waterTemperature']),
+      ph: jsonNumber(item, ['water08', 'ph']),
+      dissolvedOxygen: jsonNumber(item, ['water13', 'dissolvedOxygen', 'do']),
+      salinity: jsonNumber(item, ['water16', 'salinity']),
+      totalColiform: jsonNumber(item, ['water09', 'totalColiform']),
+    }))
+    .filter((item) => item.station !== '측정지점 미상');
 }
 
 function marineTotalCount(body: unknown): number | undefined {
@@ -501,6 +541,41 @@ async function marine(request: Request, env: Env): Promise<ApiResponse<MarineWat
   }
 }
 
+async function busanMarine(env: Env): Promise<ApiResponse<BusanMarineRecord[]>> {
+  if (!env.DATA_GO_KR_SERVICE_KEY) {
+    return response<BusanMarineRecord[]>(SOURCES.busanMarine, 'unavailable', null, '부산 해양환경 API 키가 설정되지 않았습니다.');
+  }
+  try {
+    const url = new URL(env.BUSAN_MARINE_API_URL ?? 'https://apis.data.go.kr/6260000/BusanMrnEnvrnInfoService/getMrnEnvrnInfo');
+    if (!url.searchParams.has('ServiceKey') && !url.searchParams.has('serviceKey')) {
+      url.searchParams.set('ServiceKey', serviceKey(env.DATA_GO_KR_SERVICE_KEY));
+    }
+    url.searchParams.set('pageNo', '1');
+    url.searchParams.set('numOfRows', '100');
+    url.searchParams.set('resultType', 'json');
+    const upstreamResponse = await upstreamWithRetries(url.toString(), MARINE_RETRY_DELAYS_MS);
+    if (!upstreamResponse.ok) {
+      return response<BusanMarineRecord[]>(SOURCES.busanMarine, 'unavailable', null, `부산 해양환경 API 응답 오류 (${upstreamResponse.status}). 공공데이터포털에서 이 API의 활용신청 상태를 확인하세요.`);
+    }
+    const body = await upstreamResponse.json() as unknown;
+    const records = parseBusanMarineJson(body);
+    if (!records.length) {
+      return response<BusanMarineRecord[]>(SOURCES.busanMarine, 'unavailable', null, '부산 해양환경 API 응답에서 지역별 측정값을 확인하지 못했습니다.');
+    }
+    const latest = records.reduce<BusanMarineRecord>((current, item) => {
+      const currentPeriod = `${current.inspectedYear ?? ''}${current.inspectedQuarter ?? ''}`;
+      const itemPeriod = `${item.inspectedYear ?? ''}${item.inspectedQuarter ?? ''}`;
+      return itemPeriod > currentPeriod ? item : current;
+    }, records[0]);
+    return {
+      ...response(SOURCES.busanMarine, 'success', records),
+      observedAt: [latest.inspectedYear, latest.inspectedQuarter ? `${latest.inspectedQuarter}분기` : undefined].filter(Boolean).join(' '),
+    };
+  } catch {
+    return response<BusanMarineRecord[]>(SOURCES.busanMarine, 'error', null, '부산 해양환경 API 요청을 처리하지 못했습니다.');
+  }
+}
+
 async function recalls(request: Request, env: Env): Promise<ApiResponse<RecallRecord[]>> {
   const query = new URL(request.url).searchParams.get('query')?.trim() ?? '';
   if (!env.FOOD_SAFETY_KOREA_API_KEY) return response<RecallRecord[]>(SOURCES.recalls, 'unavailable', null, '식품안전나라 API 키가 설정되지 않았습니다.');
@@ -578,8 +653,9 @@ const worker = {
     if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders(request, env) });
     const url = new URL(request.url);
     if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405, headers: corsHeaders(request, env) });
-    if (url.pathname === '/api/health') return json(response(SOURCES.marine, 'success', { marineConfigured: Boolean(env.DATA_GO_KR_SERVICE_KEY && env.MARINE_WATER_API_URL), recallsConfigured: Boolean(env.FOOD_SAFETY_KOREA_API_KEY), geminiConfigured: Boolean(env.GEMINI_API_KEY), shellfishSource: SOURCES.shellfish.url, revision: 'official-source-assist-v1' }), request, env);
+    if (url.pathname === '/api/health') return json(response(SOURCES.marine, 'success', { marineConfigured: Boolean(env.DATA_GO_KR_SERVICE_KEY && env.MARINE_WATER_API_URL), busanMarineConfigured: Boolean(env.DATA_GO_KR_SERVICE_KEY), recallsConfigured: Boolean(env.FOOD_SAFETY_KOREA_API_KEY), geminiConfigured: Boolean(env.GEMINI_API_KEY), shellfishSource: SOURCES.shellfish.url, revision: 'official-source-assist-v2' }), request, env);
     if (url.pathname === '/api/marine-water') return json(await marine(request, env), request, env);
+    if (url.pathname === '/api/busan-marine') return json(await busanMarine(env), request, env);
     if (url.pathname === '/api/recalls') return json(await recalls(request, env), request, env);
     if (url.pathname === '/api/shellfish-bulletin/latest') return json(await shellfish(), request, env);
     return new Response('Not Found', { status: 404, headers: corsHeaders(request, env) });

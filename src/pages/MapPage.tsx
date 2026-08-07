@@ -6,7 +6,7 @@ import regions from "../data/regions.json";
 import { Card, RiskBadge, SourceLine } from "../components/UI";
 import DataStatusBanner from "../components/DataStatusBanner";
 import OfficialAnalysisNotice from "../components/OfficialAnalysisNotice";
-import { fetchRealtimeSnapshot, fetchRegionMarineForecast, fetchRegionWeather } from "../services/api";
+import { fetchBusanMarineWater, fetchRealtimeSnapshot, fetchRegionMarineForecast, fetchRegionWeather } from "../services/api";
 import {
   assessRegion,
   viewState,
@@ -14,7 +14,7 @@ import {
 } from "../services/riskEngine";
 import type { Region, RiskLevel } from "../types";
 import { assessWeatherEnvironment } from "../logic/weatherEnvironment";
-import type { ApiResponse, MarineForecastObservation, RealtimeSnapshot, WeatherObservation } from "../services/types";
+import type { ApiResponse, BusanMarineRecord, MarineForecastObservation, RealtimeSnapshot, WeatherObservation } from "../services/types";
 
 const typedRegions = regions as Region[];
 const mapCenter: [number, number] = [35.14, 129.08];
@@ -30,6 +30,7 @@ export default function MapPage() {
   const [snapshot, setSnapshot] = useState<RealtimeSnapshot | null>(null);
   const [weather, setWeather] = useState<ApiResponse<WeatherObservation> | null>(null);
   const [marineForecasts, setMarineForecasts] = useState<Map<string, ApiResponse<MarineForecastObservation>>>(new Map());
+  const [busanMarine, setBusanMarine] = useState<ApiResponse<BusanMarineRecord[]> | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
@@ -43,6 +44,13 @@ export default function MapPage() {
     return () => {
       active = false;
     };
+  }, []);
+  useEffect(() => {
+    let active = true;
+    fetchBusanMarineWater().then((response) => {
+      if (active) setBusanMarine(response);
+    });
+    return () => { active = false; };
   }, []);
   useEffect(() => {
     let active = true;
@@ -82,6 +90,7 @@ export default function MapPage() {
   }, [selected.latitude, selected.longitude]);
   const weatherEnvironment = assessWeatherEnvironment(weather?.data);
   const selectedMarineForecast = marineForecasts.get(selected.id);
+  const selectedBusanMarine = findBusanMarineRecord(busanMarine?.data, selected.id);
   const globalState = loading
     ? "loading"
     : snapshot
@@ -211,6 +220,7 @@ export default function MapPage() {
             const assessment =
               assessments.get(region.id) ?? loadingAssessment();
             const marineForecast = marineForecasts.get(region.id);
+            const officialMarine = findBusanMarineRecord(busanMarine?.data, region.id);
             return (
               <button
                 key={region.id}
@@ -224,10 +234,12 @@ export default function MapPage() {
                   <small>
                     {assessment.state === "loading"
                       ? "확인 중"
-                      : formatMarineReference(marineForecast?.data) ?? assessment.summary}
+                      : formatBusanMarineReference(officialMarine) ?? formatMarineReference(marineForecast?.data) ?? assessment.summary}
                   </small>
                 </span>
-                {assessment.level === "unknown" && marineForecast?.data ? (
+                {officialMarine ? (
+                  <span className="official-marine-badge compact">공식 측정</span>
+                ) : assessment.level === "unknown" && marineForecast?.data ? (
                   <span className="marine-reference-badge compact">해양 참고</span>
                 ) : (
                   <RiskBadge level={assessment.level} compact />
@@ -243,7 +255,9 @@ export default function MapPage() {
             <MapPinned size={19} />
             <h2>{selected.name}</h2>
           </div>
-          {selectedAssessment.level === "unknown" && selectedMarineForecast?.data ? (
+          {selectedBusanMarine ? (
+            <span className="official-marine-badge">공식 지역 측정</span>
+          ) : selectedAssessment.level === "unknown" && selectedMarineForecast?.data ? (
             <span className="marine-reference-badge">해양환경 참고</span>
           ) : (
             <RiskBadge level={selectedAssessment.level} />
@@ -251,6 +265,17 @@ export default function MapPage() {
           <DataStatusBanner state={selectedAssessment.state} compact />
         </div>
         <p className="lead-copy">{selectedAssessment.summary}</p>
+        {selectedBusanMarine && busanMarine && (
+          <section className="official-marine-card" aria-label="부산시 공식 해양환경 측정값">
+            <div>
+              <span>부산시 공식 해양환경 측정</span>
+              <strong>{selectedBusanMarine.station}</strong>
+            </div>
+            <p>{formatBusanMarineReference(selectedBusanMarine)}</p>
+            <small>정기 측정자료이며 실시간 관측·해산물 섭취 안전 판정과는 구분됩니다.</small>
+            <a href={busanMarine.source.url} target="_blank" rel="noreferrer">공식 측정망 기준 보기 <ExternalLink size={13} /></a>
+          </section>
+        )}
         {selectedMarineForecast?.data && (
           <section className="marine-reference-card" aria-label="최신 해양환경 참고값">
             <div>
@@ -273,40 +298,36 @@ export default function MapPage() {
         </section>
         <OfficialAnalysisNotice analysis={snapshot?.recalls.analysis} />
         <div className="detail-grid">
-          <Detail label="공식 관측소" value={marine?.station ?? "지역 위치 정보 미제공"} />
+          <Detail label="지역 공식 측정지점" value={selectedBusanMarine?.station ?? "지역 직접 측정값 미확인"} />
+          <Detail label="측정 시기" value={formatBusanPeriod(selectedBusanMarine) ?? "확인 전"} />
+          <Detail label="WQI" value={selectedBusanMarine?.waterQualityIndex === undefined ? "확인 불가" : String(selectedBusanMarine.waterQualityIndex)} />
+          <Detail label="등급" value={selectedBusanMarine?.grade ?? "확인 불가"} />
           <Detail
             label="수온"
             value={
-              marine?.waterTemperature !== undefined
-                ? `${marine.waterTemperature}℃`
+              selectedBusanMarine?.waterTemperature !== undefined
+                ? `${selectedBusanMarine.waterTemperature}℃`
                 : "확인 불가"
             }
           />
           <Detail
             label="염분"
             value={
-              marine?.salinity !== undefined
-                ? `${marine.salinity}`
+              selectedBusanMarine?.salinity !== undefined
+                ? `${selectedBusanMarine.salinity}`
                 : "확인 불가"
             }
           />
           <Detail
             label="용존산소"
             value={
-              marine?.dissolvedOxygen !== undefined
-                ? `${marine.dissolvedOxygen}`
+              selectedBusanMarine?.dissolvedOxygen !== undefined
+                ? `${selectedBusanMarine.dissolvedOxygen}`
                 : "확인 불가"
             }
           />
-          <Detail
-            label="탁도"
-            value={
-              marine?.turbidity !== undefined
-                ? `${marine.turbidity}`
-                : "확인 불가"
-            }
-          />
-          <Detail label="관측 시각" value={marine?.observedAt ?? "확인 전"} />
+          <Detail label="pH" value={selectedBusanMarine?.ph === undefined ? "확인 불가" : String(selectedBusanMarine.ph)} />
+          <Detail label="총대장균군" value={selectedBusanMarine?.totalColiform === undefined ? "확인 불가" : String(selectedBusanMarine.totalColiform)} />
           <Detail
             label="패류독소 속보"
             value={
@@ -414,6 +435,38 @@ function formatMarineReference(data?: MarineForecastObservation | null): string 
     data.waveHeight === undefined ? undefined : `파고 ${data.waveHeight}m`,
   ].filter((value): value is string => Boolean(value));
   return values.length > 0 ? values.join(' · ') : undefined;
+}
+
+const busanStationAliases: Record<string, string[]> = {
+  gijang: ["대변", "고리"],
+  songjeong: ["송정"],
+  haeundae: ["해운대"],
+  gwangalli: ["광안리", "민락"],
+  yeongdo: ["영도", "태종대"],
+  jagalchi: ["남항", "5부두", "감천항"],
+  dadaepo: ["다대포"],
+};
+
+function findBusanMarineRecord(records: BusanMarineRecord[] | null | undefined, regionId: string): BusanMarineRecord | undefined {
+  const aliases = busanStationAliases[regionId] ?? [];
+  return records?.find((record) => aliases.some((alias) => record.station.includes(alias)));
+}
+
+function formatBusanPeriod(record?: BusanMarineRecord): string | undefined {
+  if (!record?.inspectedYear) return undefined;
+  return [record.inspectedYear, record.inspectedQuarter ? `${record.inspectedQuarter}분기` : undefined]
+    .filter((value): value is string => Boolean(value))
+    .join(" ");
+}
+
+function formatBusanMarineReference(record?: BusanMarineRecord): string | undefined {
+  if (!record) return undefined;
+  const values = [
+    formatBusanPeriod(record),
+    record.waterQualityIndex === undefined ? undefined : `WQI ${record.waterQualityIndex}`,
+    record.grade ? `${record.grade}등급` : undefined,
+  ].filter((value): value is string => Boolean(value));
+  return values.length > 0 ? `공식 측정 · ${values.join(" · ")}` : "공식 측정값";
 }
 
 function formatDateTime(value: string): string {

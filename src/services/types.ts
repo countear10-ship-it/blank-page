@@ -46,6 +46,19 @@ export interface MarineForecastObservation {
   observedAt: string;
 }
 
+export interface BusanMarineRecord {
+  station: string;
+  inspectedYear?: string;
+  inspectedQuarter?: string;
+  waterQualityIndex?: number;
+  grade?: string;
+  waterTemperature?: number;
+  ph?: number;
+  dissolvedOxygen?: number;
+  salinity?: number;
+  totalColiform?: number;
+}
+
 export interface RecallRecord {
   productName: string;
   companyName?: string;

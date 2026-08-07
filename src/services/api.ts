@@ -1,4 +1,4 @@
-import type { ApiResponse, MarineForecastObservation, MarineWaterRecord, RecallRecord, RealtimeSnapshot, ShellfishBulletin, WeatherObservation } from './types';
+import type { ApiResponse, BusanMarineRecord, MarineForecastObservation, MarineWaterRecord, RecallRecord, RealtimeSnapshot, ShellfishBulletin, WeatherObservation } from './types';
 
 const SOURCES = {
   marine: { name: '해양수산부 해양자동관측망', url: 'https://www.data.go.kr/data/15127779/openapi.do' },
@@ -6,6 +6,7 @@ const SOURCES = {
   shellfish: { name: '국립수산과학원 패류독소 속보', url: 'https://www.nifs.go.kr/board/actionBoard0021List.do?selectPage=5' },
   weather: { name: 'Open-Meteo 현재 날씨', url: 'https://open-meteo.com/en/docs' },
   marineForecast: { name: 'Open-Meteo Marine 현재 해양환경 참고값', url: 'https://open-meteo.com/en/docs/marine-weather-api' },
+  busanMarine: { name: '부산광역시 해양환경 측정(망)', url: 'https://www.data.go.kr/data/15034081/openapi.do' },
 } as const;
 
 const DEFAULT_DATA_API_BASE_URL = 'https://seasafe-busan-api.seasafe-busan-api.workers.dev';
@@ -48,6 +49,10 @@ async function request<T>(path: string, source: { name: string; url: string }): 
 
 export function fetchMarineWater(): Promise<ApiResponse<MarineWaterRecord[]>> {
   return request<MarineWaterRecord[]>('/api/marine-water', SOURCES.marine);
+}
+
+export function fetchBusanMarineWater(): Promise<ApiResponse<BusanMarineRecord[]>> {
+  return request<BusanMarineRecord[]>('/api/busan-marine', SOURCES.busanMarine);
 }
 
 export function fetchRecalls(query: string): Promise<ApiResponse<RecallRecord[]>> {
