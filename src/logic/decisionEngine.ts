@@ -6,6 +6,7 @@ import { snapshotHasOfficialDanger, snapshotIsSufficient } from '../services/ris
 const HIGH_RISK_CONDITIONS: PersonalCondition[] = ['임신', '고령자', '면역저하', '간질환'];
 
 function personalRisk(conditions: PersonalCondition[]): RiskLevel {
+  if (conditions.includes('알레르기')) return 'danger';
   return conditions.some((condition) => HIGH_RISK_CONDITIONS.includes(condition)) ? 'caution' : 'safe';
 }
 
@@ -21,7 +22,7 @@ export function evaluateDecision(input: DecisionInput, regions: Region[], refere
     if (input.conditions.includes('알레르기')) {
       reasons.push('선택한 해산물에 대한 알레르기 조건이 있어 최우선 경고로 처리했습니다.');
       actions.push('해당 해산물은 섭취하지 말고, 증상이 있으면 의료기관 안내를 받으세요.');
-      return result('섭취 피하기', '섭취 피하기', reasons, actions, 'danger', personal, storage.level, region, referenceDate);
+      return result('섭취 피하기', '섭취 피하기', reasons, actions, regionRisk, personal, storage.level, region, referenceDate);
     }
     if (region && snapshotHasOfficialDanger(realtime, region, input.seafood)) {
       reasons.push('공식 회수·판매중지 또는 선택 지역과 연결된 위험정보가 확인되었습니다.');
