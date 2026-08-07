@@ -1,7 +1,7 @@
 import type { ConsumerStorageSituation, DecisionInput, DecisionResult, PersonalCondition, Region, RiskLevel } from '../types';
 import { calculateStorageRisk } from './storageRules';
 import type { RealtimeSnapshot } from '../services/types';
-import { snapshotHasOfficialDanger, snapshotIsSufficient } from '../services/riskEngine';
+import { assessRegion, snapshotHasOfficialDanger, snapshotIsSufficient } from '../services/riskEngine';
 
 const HIGH_RISK_CONDITIONS: PersonalCondition[] = ['임신', '고령자', '면역저하', '간질환'];
 const CONSUMER_STORAGE_PRESETS: Record<ConsumerStorageSituation, { mode: '실온' | '냉장'; temperature: number; hours: number }> = {
@@ -83,6 +83,7 @@ export function evaluateDecision(input: DecisionInput, regions: Region[], refere
   }
 
   if (realtime) {
+    const regionalAssessment = assessRegion(region, realtime);
     if (region && snapshotHasOfficialDanger(realtime, region, input.seafood)) {
       reasons.push('공식 회수·판매중지 또는 선택 지역과 연결된 위험정보가 확인되었습니다.');
       actions.push('공식 원문과 판매처 안내를 확인할 때까지 섭취하지 마세요.');
@@ -92,6 +93,12 @@ export function evaluateDecision(input: DecisionInput, regions: Region[], refere
       reasons.push('필요한 공식 조회 중 일부가 완료되지 않아 최신 위험 여부를 확인할 수 없습니다.');
       actions.push('공식 원문을 직접 확인하고 판단을 보류하세요. 데이터가 확인되기 전 생식은 피하세요.');
       return result('정보 부족', '공식 원문 추가 확인 필요', reasons, actions, 'unknown', personal, storage.level, region, referenceDate);
+    }
+    if (regionalAssessment.level === 'unknown') {
+      reasons.push('선택 지역과 연결된 최신 해양 관측값은 확인되지 않았습니다.');
+      reasons.push('대신 국립수산과학원 패류독소 속보와 식품안전나라 회수·판매중지 응답을 함께 확인했지만, 이는 지역 해양환경 관측값을 대체하지 않습니다.');
+      actions.push('아래 공식 원문에서 패류독소 속보와 회수·판매중지 정보를 확인하고, 지역 확인 전에는 생식을 피하세요.');
+      return result('정보 부족', '지역 해양 관측값 추가 확인 필요', reasons, actions, 'unknown', personal, storage.level, region, referenceDate);
     }
     if (storage.level === 'danger') {
       reasons.push('입력한 시간·온도·보관 방식에서 보관 위험 신호가 높습니다.');

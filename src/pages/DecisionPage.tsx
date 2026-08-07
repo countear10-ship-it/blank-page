@@ -391,7 +391,18 @@ function DecisionResultCard({
         storage={result.storageRisk}
         personalScore={calculatePersonalRiskScore(input.conditions)}
         personalConditionCount={countPersonalRiskConditions(input.conditions)}
+        regionApplicable={input.regionId !== "unknown" && input.regionId !== "imported"}
       />
+      {input.regionId !== "unknown" && input.regionId !== "imported" && result.regionRisk === "unknown" && snapshot && (
+        <div className="official-fallback-card">
+          <strong>해양 관측값이 없을 때 함께 확인한 공식 근거</strong>
+          <p>패류독소 속보와 회수·판매중지 정보는 확인했지만, 지역 해양환경 자체를 판단하는 자료는 아닙니다.</p>
+          <div>
+            <a href={snapshot.shellfish.source.url} target="_blank" rel="noreferrer">{snapshot.shellfish.source.name}</a>
+            <a href={snapshot.recalls.source.url} target="_blank" rel="noreferrer">{snapshot.recalls.source.name}</a>
+          </div>
+        </div>
+      )}
       <OfficialAnalysisNotice analysis={snapshot?.recalls.analysis} />
       <div className="reason-columns">
         <div>

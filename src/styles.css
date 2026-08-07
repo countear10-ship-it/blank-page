@@ -292,6 +292,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .risk-bars { background: var(--sky-50); border: 1px solid #e5f0f3; }
 .bar-track { background: #dfecef; }
 .fill-safe { background: var(--safe); }.fill-caution { background: var(--warning); }.fill-danger { background: var(--danger); }.fill-unknown { background: var(--unavailable); }
+.fill-disabled { background: #b7c5ca; }
+.risk-bar-disabled { opacity: .7; }
+.risk-bar-disabled .bar-track { background: repeating-linear-gradient(135deg, #e3ecee 0 7px, #f4f8f8 7px 14px); }
+.official-fallback-card { margin-top: 14px; padding: 14px; color: var(--text-secondary); background: #fff8e9; border: 1px solid #f2dfad; border-radius: 12px; }
+.official-fallback-card strong { display: block; color: #93621a; font-size: .76rem; }
+.official-fallback-card p { margin: 6px 0 10px; font-size: .69rem; line-height: 1.55; }
+.official-fallback-card div { display: flex; flex-wrap: wrap; gap: 7px; }
+.official-fallback-card a { padding: 6px 8px; color: var(--ocean-700); background: #fff; border: 1px solid #ead6a4; border-radius: 7px; font-size: .64rem; font-weight: 800; }
 .medical-note { color: var(--text-secondary); }
 
 /* Storage, quiz and about */

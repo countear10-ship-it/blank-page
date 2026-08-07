@@ -2,9 +2,16 @@ import { describe, expect, it } from 'vitest';
 import regions from '../data/regions.json';
 import { calculatePersonalRiskScore, countPersonalRiskConditions, evaluateDecision } from './decisionEngine';
 import type { DecisionInput, Region } from '../types';
+import type { RealtimeSnapshot } from '../services/types';
 
 const base: DecisionInput = { seafood: '굴', regionId: 'songjeong', raw: false, storageSituation: '차갑게 유지', packageCondition: '이상 없음', conditions: [] };
 const typedRegions = regions as Region[];
+const source = { name: '공식 기관', url: 'https://example.gov.kr' };
+const officialFallbackSnapshot: RealtimeSnapshot = {
+  marine: { status: 'error', data: null, source, fetchedAt: '2026-08-07T00:00:00Z', stale: false },
+  recalls: { status: 'success', data: [], source, fetchedAt: '2026-08-07T00:00:00Z', stale: false },
+  shellfish: { status: 'success', data: { title: '패류독소 속보', sourceUrl: source.url, summary: '원문 확인', confirmedRisk: false }, source, fetchedAt: '2026-08-07T00:00:00Z', stale: false },
+};
 
 describe('evaluateDecision', () => {
   it('알레르기 일치 시 최우선으로 섭취 피하기를 반환하고 개인 위험을 최고로 표시한다', () => {
@@ -30,6 +37,11 @@ describe('evaluateDecision', () => {
     const result = evaluateDecision({ ...base, regionId: 'imported' }, typedRegions);
     expect(result).toMatchObject({ level: '정보 부족', regionRisk: 'unknown' });
     expect(result.reasons.join(' ')).toContain('수입산');
+  });
+  it('지역을 알지만 해양 API가 없으면 공식 속보와 회수 정보를 보조 근거로 안내한다', () => {
+    const result = evaluateDecision(base, typedRegions, '2026-08-07', officialFallbackSnapshot);
+    expect(result).toMatchObject({ level: '정보 부족', regionRisk: 'unknown' });
+    expect(result.reasons.join(' ')).toContain('패류독소 속보');
   });
   it('고위험군의 생식은 섭취 주의로 반환한다', () => {
     const result = evaluateDecision({ ...base, raw: true, conditions: ['임신'] }, typedRegions);

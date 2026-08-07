@@ -24,11 +24,14 @@ export function SectionTitle({ eyebrow, title, children }: { eyebrow?: string; t
   return <div className="section-title"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h2>{title}</h2></div>{children}</div>;
 }
 
-export function RiskBars({ region, personal, storage, personalScore, personalConditionCount = 0 }: { region: RiskLevel; personal: RiskLevel; storage: RiskLevel; personalScore?: number; personalConditionCount?: number }) {
+export function RiskBars({ region, personal, storage, personalScore, personalConditionCount = 0, regionApplicable = true }: { region: RiskLevel; personal: RiskLevel; storage: RiskLevel; personalScore?: number; personalConditionCount?: number; regionApplicable?: boolean }) {
   const items = [['지역 위험', region], ['개인 위험', personal], ['보관 위험', storage]] as const;
   const widthFor = (label: string, level: RiskLevel) => label === '개인 위험' && personalScore !== undefined ? personalScore : level === 'safe' ? 26 : level === 'caution' ? 58 : level === 'danger' ? 88 : 48;
   const personalNote = personal === 'danger' ? '알레르기 최우선' : personalConditionCount > 1 ? `${personalConditionCount}개 조건 합산 ${personalScore}` : personalConditionCount === 1 ? `1개 조건 ${personalScore}` : undefined;
-  return <div className="risk-bars">{items.map(([label, level]) => <div className="risk-bar-row" key={label}><div><span>{label}</span><span className="risk-bar-meta"><RiskBadge level={level} compact />{label === '개인 위험' && personalNote && <small>{personalNote}</small>}</span></div><div className="bar-track"><span className={`bar-fill fill-${level}`} style={{ width: `${widthFor(label, level)}%` }} /></div></div>)}</div>;
+  return <div className="risk-bars">{items.map(([label, level]) => {
+    const disabled = label === '지역 위험' && !regionApplicable;
+    return <div className={`risk-bar-row ${disabled ? 'risk-bar-disabled' : ''}`} key={label}><div><span>{disabled ? '지역 위험 (미적용)' : label}</span><span className="risk-bar-meta">{disabled ? <small>지역 또는 원산지 미확인</small> : <><RiskBadge level={level} compact />{label === '개인 위험' && personalNote && <small>{personalNote}</small>}</>}</span></div><div className="bar-track">{disabled ? <span className="bar-fill fill-disabled" style={{ width: '0%' }} /> : <span className={`bar-fill fill-${level}`} style={{ width: `${widthFor(label, level)}%` }} />}</div></div>;
+  })}</div>;
 }
 
 export function RiskHistoryChart({ points, title = '최근 위험 변화' }: { points: RiskHistoryPoint[]; title?: string }) {
