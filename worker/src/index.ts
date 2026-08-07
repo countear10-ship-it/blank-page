@@ -37,6 +37,9 @@ const SOURCES = {
   shellfish: { name: '국립수산과학원 패류독소 속보', url: 'https://www.nifs.go.kr/board/actionBoard0021List.do?selectPage=5' },
 } as const;
 
+const RECALL_CACHE_TTL_SECONDS = 6 * 60 * 60;
+const RECALL_RETRY_DELAYS_MS = [350, 700] as const;
+
 function now(): string { return new Date().toISOString(); }
 function response<T>(source: ApiSource, status: ApiResponse<T>['status'], data: T | null, message?: string): ApiResponse<T> { return { status, data, source, fetchedAt: now(), stale: false, ...(message ? { message } : {}) }; }
 function serviceKey(value: string): string {
@@ -147,12 +150,24 @@ function marineTotalCount(body: unknown): number | undefined {
   return Number.isFinite(count) ? count : undefined;
 }
 
+export function recallProviderError(body: unknown): string | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const root = body as Record<string, unknown>;
+  const service = (root.I0490 ?? root) as Record<string, unknown>;
+  const result = service.RESULT;
+  if (!result || typeof result !== 'object') return undefined;
+  const resultRecord = result as Record<string, unknown>;
+  const code = typeof resultRecord.CODE === 'string' ? resultRecord.CODE : undefined;
+  if (!code || code === 'INFO-000') return undefined;
+  const message = typeof resultRecord.MSG === 'string' ? resultRecord.MSG : undefined;
+  return message ? `${code}: ${message}` : code;
+}
+
 function parseRecallJson(body: unknown): RecallRecord[] | null {
   if (!body || typeof body !== 'object') return null;
   const root = body as Record<string, unknown>;
   const service = (root.I0490 ?? root) as Record<string, unknown>;
-  const result = service.RESULT as Record<string, unknown> | undefined;
-  if (result && result.CODE && result.CODE !== 'INFO-000') return null;
+  if (recallProviderError(body)) return null;
   const rows = Array.isArray(service.row) ? service.row : [];
   return rows.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === 'object')).map((row) => ({
     productName: String(row.PRDLST_NM ?? row.productName ?? ''),
@@ -176,6 +191,42 @@ export function parseLatestShellfishBulletin(html: string, baseUrl: string = SOU
 
 async function upstream(url: string, init?: RequestInit): Promise<Response> {
   return fetch(url, { ...init, headers: { Accept: 'application/json, text/xml, text/html', ...(init?.headers ?? {}) } });
+}
+
+function recallCacheKey(query: string): Request {
+  return new Request(`https://seasafe-busan-api-cache.invalid/recalls?query=${encodeURIComponent(query)}`);
+}
+
+async function recallFallback(query: string, message: string): Promise<ApiResponse<RecallRecord[]> | null> {
+  const cached = await caches.default.match(recallCacheKey(query));
+  if (!cached) return null;
+  try {
+    const stored = await cached.json() as ApiResponse<RecallRecord[]>;
+    if (stored.status !== 'success' || !stored.data) return null;
+    const lastCheckedAt = stored.observedAt ?? stored.fetchedAt;
+    return {
+      ...stored,
+      fetchedAt: now(),
+      stale: true,
+      message: `식품안전나라 실시간 응답이 일시적으로 지연됩니다. 마지막 정상 확인: ${lastCheckedAt}. ${message}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function storeRecallSuccess(query: string, body: ApiResponse<RecallRecord[]>): Promise<void> {
+  const cached = new Response(JSON.stringify(body), {
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': `public, max-age=${RECALL_CACHE_TTL_SECONDS}`,
+    },
+  });
+  await caches.default.put(recallCacheKey(query), cached);
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function marine(request: Request, env: Env): Promise<ApiResponse<MarineWaterRecord[]>> {
@@ -224,17 +275,40 @@ async function marine(request: Request, env: Env): Promise<ApiResponse<MarineWat
 async function recalls(request: Request, env: Env): Promise<ApiResponse<RecallRecord[]>> {
   const query = new URL(request.url).searchParams.get('query')?.trim() ?? '';
   if (!env.FOOD_SAFETY_KOREA_API_KEY) return response<RecallRecord[]>(SOURCES.recalls, 'unavailable', null, '식품안전나라 API 키가 설정되지 않았습니다.');
+  let lastError = '식품안전나라 응답을 확인하지 못했습니다.';
   try {
     const template = env.FOOD_SAFETY_KOREA_API_URL || 'https://openapi.foodsafetykorea.go.kr/api/{KEY}/I0490/json/1/100';
     const endpoint = template.replace('{KEY}', encodeURIComponent(env.FOOD_SAFETY_KOREA_API_KEY));
     const url = new URL(endpoint);
     if (query) url.pathname += `/PRDLST_NM=${encodeURIComponent(query)}`;
-    const upstreamResponse = await upstream(url.toString());
-    if (!upstreamResponse.ok) return response<RecallRecord[]>(SOURCES.recalls, 'error', null, `회수 API 응답 오류 (${upstreamResponse.status})`);
-    const parsed = parseRecallJson(await upstreamResponse.json() as unknown);
-    if (parsed === null) return response<RecallRecord[]>(SOURCES.recalls, 'error', null, '식품안전나라 응답 형식 또는 인증 상태를 확인하지 못했습니다.');
-    return { ...response(SOURCES.recalls, 'success', parsed), observedAt: now() };
-  } catch { return response<RecallRecord[]>(SOURCES.recalls, 'error', null, '회수 API 요청을 처리하지 못했습니다.'); }
+    for (let attempt = 0; attempt <= RECALL_RETRY_DELAYS_MS.length; attempt += 1) {
+      const upstreamResponse = await upstream(url.toString());
+      if (!upstreamResponse.ok) {
+        lastError = `회수 API 응답 오류 (${upstreamResponse.status})`;
+      } else {
+        const body = await upstreamResponse.json() as unknown;
+        const providerError = recallProviderError(body);
+        if (providerError) {
+          lastError = `식품안전나라 일시 응답 오류 (${providerError})`;
+        } else {
+          const parsed = parseRecallJson(body);
+          if (parsed !== null) {
+            const success = { ...response(SOURCES.recalls, 'success', parsed), observedAt: now() };
+            await storeRecallSuccess(query, success);
+            return success;
+          }
+          lastError = '식품안전나라 응답 형식 또는 인증 상태를 확인하지 못했습니다.';
+        }
+      }
+      const delay = RECALL_RETRY_DELAYS_MS[attempt];
+      if (delay !== undefined) await wait(delay);
+    }
+  } catch {
+    lastError = '회수 API 요청을 처리하지 못했습니다.';
+  }
+  const cached = await recallFallback(query, lastError);
+  if (cached) return cached;
+  return response<RecallRecord[]>(SOURCES.recalls, 'unavailable', null, `${lastError} 잠시 후 다시 확인하세요.`);
 }
 
 async function shellfish(): Promise<ApiResponse<ShellfishBulletin>> {

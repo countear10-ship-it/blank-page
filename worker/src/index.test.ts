@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseLatestShellfishBulletin, parseMarineJson, parseMarineXml } from './index';
+import { parseLatestShellfishBulletin, parseMarineJson, parseMarineXml, recallProviderError } from './index';
 
 describe('worker parsers', () => {
   it('해양 XML에서 확인 가능한 관측값만 추출한다', () => {
@@ -26,5 +26,8 @@ describe('worker parsers', () => {
   it('해양자동관측망 JSON 응답을 관측 레코드로 변환한다', () => {
     const records = parseMarineJson({ body: { items: { item: [{ rtmWqWtchStaCd: 'NEP2002', rtmWqWtchDtlDt: '2020-02-06 15:25:00.0', rtmWtchWtem: '7.590', ph: '7.980', rtmWqDoxn: '11.760' }] } } });
     expect(records[0]).toMatchObject({ station: 'NEP2002', stationId: 'NEP2002', observedAt: '2020-02-06 15:25:00.0', waterTemperature: 7.59, ph: 7.98, dissolvedOxygen: 11.76 });
+  });
+  it('preserves a temporary Food Safety Korea error message', () => {
+    expect(recallProviderError({ I0490: { RESULT: { CODE: 'ERROR-503', MSG: 'Retry later.' } } })).toBe('ERROR-503: Retry later.');
   });
 });

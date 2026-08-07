@@ -49,6 +49,10 @@ export function assessRegion(region: Region, snapshot: RealtimeSnapshot): Region
     reasons.push('공식 데이터 응답은 도착했지만 해양환경 자료만으로 해산물의 안전을 보장할 수 없습니다.');
     return { level: 'safe', state: 'latest', summary: '현재 확인된 공식 데이터에서 즉시 확인되는 지역 위험정보 없음', reasons, marine, recallCount, shellfish: snapshot.shellfish };
   }
+  if (snapshot.marine.status === 'success' && snapshot.shellfish.status === 'success' && snapshot.recalls.status === 'unavailable') {
+    reasons.push('해양관측과 패류독소 속보는 확인됐지만 회수·판매중지 정보의 실시간 응답이 일시적으로 지연됩니다.');
+    return { level: 'unknown', state: 'manual-confirm', summary: '회수·판매중지 정보 일시 확인 불가 · 원문 확인 필요', reasons, marine, recallCount, shellfish: snapshot.shellfish };
+  }
   const states = [viewState(snapshot.marine), viewState(snapshot.recalls), viewState(snapshot.shellfish)];
   const state = states.includes('error') ? 'error' : states.includes('unavailable') ? 'unavailable' : 'no-data';
   reasons.push('필요한 공식 데이터가 모두 확인되지 않아 지역 위험을 판단하지 않습니다.');

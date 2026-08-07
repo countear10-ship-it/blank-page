@@ -27,4 +27,12 @@ describe('live risk engine', () => {
     expect(assessRegion(region, snapshot).level).toBe('unknown');
     expect(assessRegion(region, snapshot).state).toBe('error');
   });
+  it('keeps a temporary recall outage in manual-confirm state', () => {
+    const snapshot: RealtimeSnapshot = {
+      marine: envelope(marine),
+      recalls: envelope<RecallRecord[]>(null, 'unavailable'),
+      shellfish: envelope(bulletin),
+    };
+    expect(assessRegion(region, snapshot)).toMatchObject({ level: 'unknown', state: 'manual-confirm' });
+  });
 });
