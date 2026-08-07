@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateStorageRisk } from './storageRules';
+import { calculateStorageRisk, storageRiskSignals } from './storageRules';
 
 describe('calculateStorageRisk', () => {
   it('실온 12시간은 냉장 3시간보다 위험도가 높다', () => {
@@ -12,5 +12,10 @@ describe('calculateStorageRisk', () => {
     const raw = calculateStorageRisk({ seafood: '굴', mode: '냉장', temperature: 4, hours: 12, raw: true });
     const cooked = calculateStorageRisk({ seafood: '굴', mode: '냉장', temperature: 4, hours: 12, raw: false });
     expect(raw.score).toBeGreaterThan(cooked.score);
+  });
+  it('생식 수산물은 검사 대상 병원체를 참고 정보로 안내한다', () => {
+    const signals = storageRiskSignals({ seafood: '굴', mode: '냉장', temperature: 4, hours: 3, raw: true });
+    expect(signals.some((signal) => signal.title === '생식 수산물의 공식 검사 대상')).toBe(true);
+    expect(signals.some((signal) => signal.description.includes('존재 여부는 판단할 수 없습니다'))).toBe(true);
   });
 });
