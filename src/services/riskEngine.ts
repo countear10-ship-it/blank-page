@@ -30,6 +30,13 @@ function hasRegionalRecall(records: RecallRecord[], region: Region): boolean {
   return records.some((record) => containsRegion(`${record.region ?? ''} ${record.productName} ${record.reason ?? ''}`, region));
 }
 
+export function latestMarineRecord(records?: MarineWaterRecord[] | null): MarineWaterRecord | undefined {
+  return records?.reduce<MarineWaterRecord | undefined>((latest, record) => {
+    if (!latest || record.observedAt > latest.observedAt) return record;
+    return latest;
+  }, undefined);
+}
+
 export function assessRegion(region: Region, snapshot: RealtimeSnapshot): RegionRiskAssessment {
   const reasons: string[] = [];
   const marine = snapshot.marine.data?.find((record) => containsRegion(record.station, region));
@@ -44,6 +51,10 @@ export function assessRegion(region: Region, snapshot: RealtimeSnapshot): Region
   if (bulletin?.confirmedRisk && bulletinMatches) {
     reasons.push('공식 패류독소 속보에서 선택 지역과 연결된 주의정보가 확인되었습니다.');
     return { level: 'danger', state: 'manual-confirm', summary: '패류독소 원문에서 채취금지 여부를 확인하세요.', reasons, marine, recallCount, shellfish: snapshot.shellfish };
+  }
+  if (snapshot.marine.status === 'success' && !marine) {
+    reasons.push('최신 해양관측값은 수집됐지만 선택 지역과 연결된 관측소 정보는 확인되지 않았습니다.');
+    return { level: 'unknown', state: 'manual-confirm', summary: '선택 지역 관측소 미확인 · 최근 수집 관측값 참고', reasons, marine, recallCount, shellfish: snapshot.shellfish };
   }
   if (snapshot.shellfish.status === 'success' && snapshot.recalls.status === 'success' && snapshot.marine.status === 'success' && !snapshot.marine.stale) {
     reasons.push('공식 데이터 응답은 도착했지만 해양환경 자료만으로 해산물의 안전을 보장할 수 없습니다.');

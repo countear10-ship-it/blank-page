@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import regions from '../data/regions.json';
-import { assessRegion, snapshotHasOfficialDanger } from './riskEngine';
+import { assessRegion, latestMarineRecord, snapshotHasOfficialDanger } from './riskEngine';
 import type { ApiResponse, MarineWaterRecord, RecallRecord, RealtimeSnapshot, ShellfishBulletin } from './types';
 import type { Region } from '../types';
 
@@ -11,6 +11,13 @@ const marine: MarineWaterRecord[] = [{ station: '기장 관측소', observedAt: 
 const bulletin: ShellfishBulletin = { title: '패류독소 속보', sourceUrl: source.url, summary: '원문 확인 필요', confirmedRisk: false };
 
 describe('live risk engine', () => {
+  it('chooses the most recently observed marine record', () => {
+    expect(latestMarineRecord([
+      { station: 'A', observedAt: '2026-08-06 09:00:00.0' },
+      { station: 'B', observedAt: '2026-08-07 09:10:00.0' },
+    ])).toMatchObject({ station: 'B' });
+  });
+
   it('공식 회수 정보가 있으면 지역을 위험으로 올린다', () => {
     const recalls: RecallRecord[] = [{ productName: '굴', reason: '기장 회수', region: '기장', sourceUrl: source.url }];
     const snapshot: RealtimeSnapshot = { marine: envelope(marine), recalls: envelope(recalls), shellfish: envelope(bulletin) };
